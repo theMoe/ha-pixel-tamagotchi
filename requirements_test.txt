@@ -1,0 +1,8 @@
+# Getestete Kombinationen (Python-Version -> HA -> Testbibliothek -> Frontend-Paket)
+# Python 3.14: homeassistant==2026.9.0  pytest-homeassistant-custom-component==0.13.363  home-assistant-frontend==20260826.4
+# Python 3.14: homeassistant==2026.8.3  pytest-homeassistant-custom-component==0.13.357  home-assistant-frontend==20260729.7
+# Python 3.12: homeassistant==2025.1.4  pytest-homeassistant-custom-component==0.13.205  home-assistant-frontend==20250109.2
+pytest
+pytest-homeassistant-custom-component==0.13.363
+home-assistant-frontend==20260826.4
+ruff

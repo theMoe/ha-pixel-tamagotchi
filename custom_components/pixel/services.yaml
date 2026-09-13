@@ -1,0 +1,148 @@
+feed:
+  fields:
+    meal:
+      required: false
+      default: meal
+      selector:
+        select:
+          options:
+            - snack
+            - meal
+            - treat
+          translation_key: meal
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel
+
+play:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel
+
+pet:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel
+
+clean:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel
+
+medicine:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel
+
+sleep:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel
+
+wake:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel
+
+set_mood:
+  fields:
+    mood:
+      required: true
+      selector:
+        select:
+          options:
+            - auto
+            - happy
+            - excited
+            - bored
+            - busy
+            - stressed
+            - lonely
+            - hungry
+            - sleeping
+            - sick
+          translation_key: mood
+    minutes:
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 1440
+          unit_of_measurement: min
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel
+
+say:
+  fields:
+    text:
+      required: true
+      selector:
+        text:
+    duration:
+      required: false
+      default: 4
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: s
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel
+
+trick:
+  fields:
+    trick:
+      required: false
+      default: random
+      selector:
+        select:
+          options:
+            - random
+            - tumble
+            - jump
+            - kick
+            - hide
+            - wave
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel
+
+reset:
+  fields:
+    name:
+      required: false
+      selector:
+        text:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel

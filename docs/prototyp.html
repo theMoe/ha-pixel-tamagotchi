@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel – Dashboard-Tamagotchi Prototyp</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#111;--card:#1f1f1f;--card2:#262626;--text:#e6e6e6;--muted:#9a9a9a;
+    --accent:#03a9f4;--warn:#ffb300;--ok:#66bb6a;
+    --pet-body:#ffcf4d;--pet-dark:#c98a1c;--pet-blush:#ff8a80;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+  body{display:flex;flex-direction:column;min-height:100vh}
+  header{padding:14px 16px 6px;display:flex;align-items:baseline;gap:10px}
+  header h1{font-size:17px;font-weight:500;margin:0}
+  header span{font-size:12px;color:var(--muted)}
+  .dash{position:relative;padding:14px 12px 96px;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start;flex:1;overflow:hidden}
+  .card{position:relative;z-index:2;background:var(--card);border-radius:12px;padding:14px;min-height:96px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 1px 0 rgba(255,255,255,.03) inset;transition:transform .12s}
+  .card.wide{grid-column:1/-1}
+  .card .lbl{font-size:12px;color:var(--muted)}
+  .card .val{font-size:26px;font-weight:500;margin-top:4px}
+  .card .val small{font-size:14px;color:var(--muted);font-weight:400}
+  .card.shake{animation:shake .4s}
+  @keyframes shake{25%{transform:translateX(-4px)}50%{transform:translateX(4px)}75%{transform:translateX(-2px)}}
+  .cal li{list-style:none;font-size:13px;padding:4px 0;border-left:3px solid var(--accent);padding-left:8px;margin:5px 0;color:#ddd}
+  .cal ul{margin:6px 0 0;padding:0}
+  .persons{display:flex;gap:10px;margin-top:8px}
+  .person{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
+  .person i{width:36px;height:36px;border-radius:50%;background:#333;display:grid;place-items:center;font-style:normal;font-size:14px;color:#fff;border:2px solid var(--ok)}
+  .person.away i{border-color:#555;opacity:.6}
+  .weather-ico{font-size:34px}
+  .sonos{display:flex;align-items:center;gap:10px}
+  .bars{display:flex;gap:2px;align-items:flex-end;height:22px}
+  .bars b{width:4px;background:var(--accent);animation:eq 1s infinite ease-in-out;border-radius:1px}
+  .bars b:nth-child(2){animation-delay:.2s}.bars b:nth-child(3){animation-delay:.4s}.bars b:nth-child(4){animation-delay:.1s}
+  @keyframes eq{0%,100%{height:6px}50%{height:22px}}
+  .sonos.off .bars b{animation:none;height:4px;background:#444}
+
+  /* ---------- Pixel ---------- */
+  #pet{position:absolute;width:64px;height:64px;z-index:3;transform-origin:50% 100%;will-change:transform;cursor:pointer;touch-action:manipulation}
+  #pet svg{width:100%;height:100%;shape-rendering:crispEdges;overflow:visible}
+  #pet.flip .rig{transform:scaleX(-1);transform-origin:50% 50%}
+  #pet.behind{z-index:1}
+  #pet.tumble .rig{animation:tumble .9s linear}
+  @keyframes tumble{to{transform:rotate(360deg)}}
+  #pet.eat .mouth{animation:chew .25s steps(1) infinite alternate}
+  @keyframes chew{50%{transform:scaleY(2.2)}}
+  .mouth{transform-origin:center;transform-box:fill-box}
+  .layer{display:none}.layer.on{display:inline}
+  #bubble{position:absolute;z-index:4;font-family:'Press Start 2P',monospace;font-size:9px;line-height:1.5;background:#fff;color:#111;padding:8px 9px;border-radius:2px;box-shadow:3px 3px 0 #000;max-width:150px;pointer-events:none;opacity:0;transition:opacity .15s}
+  #bubble.on{opacity:1}
+  #bubble::after{content:"";position:absolute;left:12px;bottom:-6px;border:6px solid transparent;border-top-color:#fff;border-bottom:0}
+  .heart,.zzz{position:absolute;z-index:4;font-family:'Press Start 2P',monospace;pointer-events:none;animation:rise 1.3s forwards}
+  .heart{color:var(--pet-blush);font-size:12px}.zzz{color:#8ab4f8;font-size:10px}
+  @keyframes rise{to{transform:translateY(-40px);opacity:0}}
+  .poop{position:absolute;z-index:2;font-size:22px;cursor:pointer;filter:drop-shadow(0 2px 0 #000)}
+  .rain{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:0;transition:opacity .6s;
+    background:repeating-linear-gradient(105deg,transparent 0 22px,rgba(3,169,244,.18) 22px 23px);animation:rainfall .5s linear infinite}
+  .rain.on{opacity:1}
+  @keyframes rainfall{to{background-position:0 40px}}
+  .dash.night::before{content:"";position:absolute;inset:0;background:rgba(5,10,30,.45);z-index:2;pointer-events:none}
+
+  /* ---------- Steuerung (nur Demo) ---------- */
+  .ctl{position:fixed;left:0;right:0;bottom:0;background:#0a0a0a;border-top:1px solid #222;padding:10px 12px 12px;z-index:20}
+  .ctl .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .ctl .row+.row{margin-top:8px}
+  .ctl button,.ctl label.seg{font:inherit;font-size:13px;background:#1f1f1f;color:var(--text);border:1px solid #333;border-radius:8px;padding:7px 11px;cursor:pointer}
+  .ctl button:active{background:#333}
+  .ctl .seg input{display:none}.ctl .seg:has(input:checked){background:var(--accent);color:#000;border-color:var(--accent)}
+  .stat{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);min-width:96px}
+  .stat i{flex:1;height:6px;background:#262626;border-radius:3px;overflow:hidden;font-style:normal}
+  .stat i b{display:block;height:100%;background:var(--ok);transition:width .4s}
+  .stat i b.low{background:var(--warn)}
+  .cnt{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .cnt input{width:90px}
+  @media (prefers-reduced-motion:reduce){.bars b,.rain{animation:none}}
+</style>
+</head>
+<body>
+<header><h1>Zuhause</h1><span>Prototyp · tippe auf Pixel, Karten oder die Häufchen</span></header>
+
+<div class="dash" id="dash">
+  <div class="rain" id="rain"></div>
+
+  <div class="card" data-name="Wetter"><div class="lbl">Zuhause</div><div><div class="weather-ico" id="wIco">☀️</div><div class="val" id="wTemp">24<small> °C</small></div></div></div>
+  <div class="card" data-name="Wohnzimmer"><div class="lbl">Wohnzimmer</div><div class="val">21,5<small> °C</small></div><div class="lbl">Fenster geschlossen</div></div>
+
+  <div class="card wide cal" data-name="Kalender" data-fav="1"><div class="lbl">Heute</div><ul id="calList"></ul></div>
+
+  <div class="card" data-name="Familie"><div class="lbl">Familie</div><div class="persons" id="persons"><div class="person"><i>M</i>Zuhause</div><div class="person away"><i>E</i>Arbeit</div><div class="person"><i>O</i>Zuhause</div><div class="person"><i>P</i>Zuhause</div></div></div>
+  <div class="card sonos off" data-name="Sonos" id="sonos"><div class="lbl">Sonos Küche</div><div class="sonos"><div class="bars"><b></b><b></b><b></b><b></b></div><div class="lbl" id="sonosTxt">Pause</div></div></div>
+
+  <div class="card" data-name="Luft"><div class="lbl">Luftreiniger</div><div class="val">Auto</div><div class="lbl">Feinstaub 4 µg/m³</div></div>
+  <div class="card" data-name="Strom"><div class="lbl">Verbrauch</div><div class="val">412<small> W</small></div></div>
+
+  <!-- Pixel -->
+  <div id="pet" aria-label="Pixel">
+    <svg viewBox="0 0 16 16">
+      <g class="rig">
+        <!-- Schirm (hinter Körper) -->
+        <g class="layer umbrella"><rect x="12" y="6" width="1" height="9" fill="#5a3a1a"/><path d="M6 6h13v1H6z M7 5h11v1H7z M8 4h9v1H8z M9 3h7v1H9z M11 2h3v1h-3z" fill="#e53935"/><path d="M8 5h2v1H8z M12 5h2v1h-2z M16 5h2v1h-2z" fill="#fff"/></g>
+        <!-- Beine -->
+        <g class="legs"><rect class="l1" x="5" y="14" width="2" height="2" fill="var(--pet-dark)"/><rect class="l2" x="9" y="14" width="2" height="2" fill="var(--pet-dark)"/></g>
+        <!-- Körper -->
+        <path d="M4 5h8v1h1v7h-1v1H4v-1H3V6h1z" fill="var(--pet-body)"/>
+        <rect x="4" y="12" width="8" height="1" fill="var(--pet-dark)" opacity=".5"/>
+        <!-- Ohren -->
+        <rect x="4" y="3" width="2" height="2" fill="var(--pet-body)"/><rect x="10" y="3" width="2" height="2" fill="var(--pet-body)"/>
+        <rect class="ear" x="4" y="2" width="2" height="1" fill="var(--pet-body)"/><rect class="ear" x="10" y="2" width="2" height="1" fill="var(--pet-body)"/>
+        <!-- Arme -->
+        <rect class="arm" x="2" y="8" width="1" height="3" fill="var(--pet-dark)"/><rect class="arm" x="13" y="8" width="1" height="3" fill="var(--pet-dark)"/>
+        <!-- Augen -->
+        <g class="eyes"><rect x="5" y="7" width="2" height="2" fill="#fff"/><rect x="9" y="7" width="2" height="2" fill="#fff"/>
+          <rect class="pupil" x="6" y="8" width="1" height="1" fill="#111"/><rect class="pupil" x="10" y="8" width="1" height="1" fill="#111"/></g>
+        <g class="layer eyesClosed"><rect x="5" y="8" width="2" height="1" fill="#111"/><rect x="9" y="8" width="2" height="1" fill="#111"/></g>
+        <!-- Wangen -->
+        <rect x="4" y="9" width="1" height="1" fill="var(--pet-blush)" opacity=".7"/><rect x="11" y="9" width="1" height="1" fill="var(--pet-blush)" opacity=".7"/>
+        <!-- Mund -->
+        <rect class="mouth m-smile" x="7" y="10" width="2" height="1" fill="#111"/>
+        <path class="layer mouth m-frown" d="M6 11h1v-1h2v1h1v1H9v-1H7v1H6z" fill="#111"/>
+        <!-- Sonnenbrille -->
+        <g class="layer glasses"><rect x="4" y="7" width="3" height="2" fill="#111"/><rect x="9" y="7" width="3" height="2" fill="#111"/><rect x="7" y="7" width="2" height="1" fill="#111"/><rect x="5" y="7" width="1" height="1" fill="#8ab4f8" opacity=".8"/><rect x="10" y="7" width="1" height="1" fill="#8ab4f8" opacity=".8"/></g>
+        <!-- Schlafmütze -->
+        <g class="layer cap"><path d="M4 3h8v1H4z M5 2h6v1H5z M7 1h3v1H7z M9 0h2v1H9z" fill="#5c6bc0"/><rect x="11" y="1" width="2" height="1" fill="#fff"/><rect x="4" y="3" width="8" height="1" fill="#fff"/></g>
+        <!-- Klemmbrett -->
+        <g class="layer clip"><rect x="12" y="7" width="3" height="4" fill="#8d6e63"/><rect x="12.5" y="7.5" width="2" height="3" fill="#fff"/><rect x="13" y="8" width="1" height="1" fill="#03a9f4"/></g>
+        <!-- Schweiß -->
+        <g class="layer sweat"><rect x="2" y="5" width="1" height="1" fill="#4fc3f7"/><rect x="2" y="6" width="1" height="1" fill="#03a9f4"/><rect x="13" y="4" width="1" height="1" fill="#4fc3f7"/></g>
+      </g>
+    </svg>
+  </div>
+  <div id="bubble"></div>
+</div>
+
+<div class="ctl">
+  <div class="row">
+    <label class="seg"><input type="radio" name="w" value="sunny" checked>☀️ Sonnig</label>
+    <label class="seg"><input type="radio" name="w" value="rainy">🌧️ Regen</label>
+    <label class="seg"><input type="radio" name="w" value="night">🌙 Nacht</label>
+    <span class="cnt">Termine <input type="range" id="appts" min="0" max="8" value="2"><b id="apptN">2</b></span>
+  </div>
+  <div class="row">
+    <button id="bFeed">🍎 Füttern</button>
+    <button id="bPlay">⚽ Spielen</button>
+    <button id="bHide">🙈 Verstecken</button>
+    <button id="bTrick">🤸 Trick</button>
+    <button id="bSonos">🎵 Sonos</button>
+  </div>
+  <div class="row">
+    <span class="stat">Hunger<i><b id="sHunger"></b></i></span>
+    <span class="stat">Laune<i><b id="sHappy"></b></i></span>
+    <span class="stat">Energie<i><b id="sEnergy"></b></i></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const dash = document.getElementById('dash');
+  const pet = document.getElementById('pet');
+  const bubble = document.getElementById('bubble');
+  const $ = s => document.querySelector(s);
+  const on = (sel, v) => pet.querySelectorAll(sel).forEach(e => e.classList.toggle('on', v));
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  const PET = 64;
+
+  // ---------- Zustand (im echten Projekt: HA-Entities) ----------
+  const S = { hunger: 70, happy: 75, energy: 85, weather: 'sunny', appts: 2, sonos: false,
+              mood: 'happy', activity: 'idle', hiddenBehind: null, sleeping: false, busy: false };
+
+  // ---------- Möbel: Karten scannen ----------
+  let surfaces = [];
+  function scan() {
+    const d = dash.getBoundingClientRect();
+    surfaces = [...dash.querySelectorAll('.card')].map(c => {
+      const r = c.getBoundingClientRect();
+      return { el: c, name: c.dataset.name, fav: !!c.dataset.fav,
+               x1: r.left - d.left, x2: r.right - d.left, top: r.top - d.top, bottom: r.bottom - d.top };
+    });
+    surfaces.floor = dash.clientHeight - 100;
+  }
+  scan(); addEventListener('resize', () => { scan(); if (S.activity === 'idle') place(pos.x, pos.y); });
+
+  // Position: x = linke Kante, y = Fußlinie (bottom)
+  const pos = { x: 40, y: 0 };
+  function place(x, y) {
+    pos.x = x; pos.y = y;
+    pet.style.transform = `translate(${x}px, ${y - PET}px)`;
+    const b = bubble.classList.contains('on');
+    if (b) { bubble.style.left = (x - 6) + 'px'; bubble.style.top = (y - PET - bubble.offsetHeight - 10) + 'px'; }
+  }
+
+  // ---------- Tween ----------
+  function tween(to, opts = {}) {
+    return new Promise(res => {
+      const from = { ...pos }, dist = Math.hypot(to.x - from.x, to.y - from.y);
+      const dur = opts.dur ?? Math.max(350, dist / speed());
+      const hop = to.y !== from.y ? Math.max(30, Math.abs(to.y - from.y) * .3) : 0;
+      pet.classList.toggle('flip', to.x < from.x);
+      const t0 = performance.now();
+      let lastStep = 0, frame = 0;
+      (function f(now) {
+        const t = Math.min(1, (now - t0) / dur);
+        const e = t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+        const arc = hop ? Math.sin(t * Math.PI) * hop : 0;
+        place(from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e - arc);
+        if (now - lastStep > 125) { lastStep = now; frame ^= 1; legs(frame); }   // 8 fps Schrittzyklus
+        t < 1 ? requestAnimationFrame(f) : (legs(-1), res());
+      })(t0);
+    });
+  }
+  const speed = () => S.appts >= 6 ? .38 : S.appts >= 3 ? .26 : .16;   // px/ms
+  function legs(fr) {
+    const l1 = pet.querySelector('.l1'), l2 = pet.querySelector('.l2');
+    l1.setAttribute('y', fr === 0 ? 13 : 14); l2.setAttribute('y', fr === 1 ? 13 : 14);
+  }
+
+  // ---------- Sprechblase ----------
+  let bubbleT;
+  function say(txt, ms = 2200) {
+    bubble.textContent = txt; bubble.classList.add('on'); place(pos.x, pos.y);
+    clearTimeout(bubbleT); bubbleT = setTimeout(() => bubble.classList.remove('on'), ms);
+  }
+  function fx(cls, txt, dx = 20) {
+    const e = document.createElement('div'); e.className = cls; e.textContent = txt;
+    e.style.left = (pos.x + dx) + 'px'; e.style.top = (pos.y - PET - 8) + 'px';
+    dash.appendChild(e); setTimeout(() => e.remove(), 1300);
+  }
+
+  // ---------- Mood & Outfit ----------
+  function evaluate() {
+    S.sleeping = S.weather === 'night' || S.energy < 15;
+    S.mood = S.sleeping ? 'sleeping' : S.hunger < 30 ? 'hungry' : S.appts >= 6 ? 'stressed' : S.appts >= 3 ? 'busy' : S.happy < 40 ? 'lonely' : 'happy';
+    on('.glasses', S.weather === 'sunny' && !S.sleeping);
+    on('.umbrella', S.weather === 'rainy' && !S.sleeping && !S.hiddenBehind);
+    on('.cap', S.sleeping);
+    on('.eyesClosed', S.sleeping);
+    pet.querySelector('.eyes').style.display = S.sleeping ? 'none' : '';
+    on('.sweat', S.mood === 'stressed');
+    on('.clip', S.mood === 'busy' || S.mood === 'stressed');
+    const frown = ['hungry', 'stressed', 'lonely'].includes(S.mood);
+    on('.m-frown', frown); pet.querySelector('.m-smile').style.display = frown || S.sleeping ? 'none' : '';
+    $('#rain').classList.toggle('on', S.weather === 'rainy');
+    dash.classList.toggle('night', S.weather === 'night');
+    $('#wIco').textContent = { sunny: '☀️', rainy: '🌧️', night: '🌙' }[S.weather];
+    $('#wTemp').firstChild.textContent = { sunny: '24', rainy: '15', night: '11' }[S.weather];
+    for (const [k, id] of [['hunger', 'sHunger'], ['happy', 'sHappy'], ['energy', 'sEnergy']]) {
+      const b = document.getElementById(id); b.style.width = S[k] + '%'; b.classList.toggle('low', S[k] < 30);
+    }
+  }
+
+  // ---------- Verhalten ----------
+  async function walkRandom() {
+    const s = pick(surfaces.concat([null, null]));           // null = Boden
+    const y = s ? s.top : surfaces.floor;
+    const x = s ? rnd(s.x1 + 6, Math.max(s.x1 + 6, s.x2 - PET - 6)) : rnd(8, dash.clientWidth - PET - 8);
+    await tween({ x, y });
+  }
+  async function hide(target) {
+    const s = target || pick(surfaces.filter(c => c.fav).concat(surfaces));
+    S.activity = 'hiding';
+    await tween({ x: s.x1 + rnd(8, s.x2 - s.x1 - PET - 8), y: s.top });
+    on('.umbrella', false);
+    pet.classList.add('behind'); S.hiddenBehind = s;
+    await tween({ x: pos.x, y: s.top + PET - 12, dur: 400 });   // hinter die Karte rutschen, Ohren gucken raus
+    say(pick(['psst', 'hier ist\nniemand', '...']), 1600);
+    peekLoop();
+  }
+  async function peekLoop() {
+    while (S.hiddenBehind && !S.busy) {
+      await wait(rnd(1800, 3500)); if (!S.hiddenBehind) break;
+      await tween({ x: pos.x, y: pos.y - 10, dur: 250 });     // Augen rausschieben
+      await wait(900);
+      if (S.hiddenBehind) await tween({ x: pos.x, y: pos.y + 10, dur: 250 });
+    }
+  }
+  async function unhide(startled) {
+    if (!S.hiddenBehind) return;
+    const s = S.hiddenBehind; S.hiddenBehind = null;
+    pet.classList.remove('behind');
+    await tween({ x: pos.x, y: s.top, dur: 350 });
+    if (startled) { say('BUH!', 1200); s.el.classList.add('shake'); setTimeout(() => s.el.classList.remove('shake'), 500); S.happy = Math.min(100, S.happy + 5); }
+    evaluate();
+  }
+  async function trick() {
+    S.activity = 'trick';
+    const dir = pos.x < dash.clientWidth / 2 ? 1 : -1;
+    pet.classList.add('tumble');
+    await tween({ x: Math.min(dash.clientWidth - PET - 8, Math.max(8, pos.x + dir * 160)), y: pos.y, dur: 900 });
+    pet.classList.remove('tumble');
+    say(pick(['tadaa!', 'nochmal?', 'hui']), 1500);
+  }
+  async function kickCard() {
+    const s = pick(surfaces.filter(c => c.name !== 'Kalender'));
+    await tween({ x: s.x1 + 10, y: s.top });
+    s.el.classList.add('shake'); setTimeout(() => s.el.classList.remove('shake'), 500);
+    say('hihi', 1200);
+  }
+  async function pointAt(name, txt) {
+    const s = surfaces.find(c => c.name === name); if (!s) return;
+    await tween({ x: s.x1 + 6, y: s.top });
+    say(txt, 2600);
+  }
+  async function eat() {
+    S.busy = true; await unhide(false);
+    pet.classList.add('eat'); say(pick(['mjam', 'lecker!', 'nom nom']), 1800);
+    await wait(1800); pet.classList.remove('eat');
+    S.hunger = Math.min(100, S.hunger + 35); S.happy = Math.min(100, S.happy + 5);
+    if (S.hunger > 95) say('*rülps*', 1200);
+    S.busy = false; evaluate();
+    setTimeout(poop, rnd(15000, 25000));
+  }
+  function poop() {
+    const p = document.createElement('div'); p.className = 'poop'; p.textContent = '💩';
+    p.style.left = rnd(20, dash.clientWidth - 40) + 'px'; p.style.top = (surfaces.floor - 26) + 'px';
+    p.title = 'Wegputzen'; p.onclick = () => { p.remove(); S.happy = Math.min(100, S.happy + 8); say('danke!', 1200); evaluate(); };
+    dash.appendChild(p);
+  }
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+
+  // Idle-Schleife: wählt alle paar Sekunden eine Aktivität
+  (async function loop() {
+    while (true) {
+      await wait(rnd(1800, 3600));
+      if (S.busy || S.hiddenBehind) continue;
+      if (S.sleeping) { if (Math.random() < .6) fx('zzz', 'z', 40); S.energy = Math.min(100, S.energy + 3); evaluate(); continue; }
+      S.activity = 'idle';
+      const r = Math.random();
+      if (S.mood === 'hungry' && r < .45) await pointAt('Familie', pick(['Hunger!', 'wann gibt\nes essen?']));
+      else if (S.mood === 'stressed' && r < .4) await pointAt('Kalender', pick(['so viel\nzu tun', 'keine\nzeit!']));
+      else if (S.weather === 'rainy' && r < .12) say('platsch', 1000);
+      else if (S.weather === 'sunny' && r < .1) say(pick(['ahh, sonne', 'eis?']), 1400);
+      else if (S.sonos && r < .45) { pet.classList.add('tumble'); await tween({ x: pos.x + pick([-30, 30]), y: pos.y, dur: 900 }); pet.classList.remove('tumble'); }
+      else if (r < .18) await hide();
+      else if (r < .28) await trick();
+      else if (r < .36) await kickCard();
+      else if (r < .42) { await tween({ x: pos.x, y: pos.y - 12, dur: 180 }); await tween({ x: pos.x, y: pos.y + 12, dur: 180 }); }
+      else await walkRandom();
+    }
+  })();
+
+  // Bedürfnisse sinken (Demo-Tempo)
+  setInterval(() => {
+    if (!S.sleeping) { S.hunger = Math.max(0, S.hunger - 1); S.energy = Math.max(0, S.energy - .4); }
+    S.happy = Math.max(0, S.happy - .5 - (S.hiddenBehind ? 0 : (S.appts >= 6 ? .5 : 0)));
+    evaluate();
+  }, 1500);
+
+  // Augen folgen Finger/Maus
+  addEventListener('pointermove', e => {
+    if (S.sleeping) return;
+    const r = pet.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const dx = Math.max(-1, Math.min(1, (e.clientX - cx) / 120)), dy = Math.max(-1, Math.min(1, (e.clientY - cy) / 120));
+    const flip = pet.classList.contains('flip') ? -1 : 1;
+    pet.querySelectorAll('.pupil').forEach((p, i) => { p.setAttribute('x', (i ? 10 : 6) + dx * flip * .6); p.setAttribute('y', 8 + dy * .5); });
+  });
+
+  // Interaktion
+  pet.addEventListener('click', () => {
+    if (S.hiddenBehind) return unhide(true);
+    if (S.sleeping) return say('grmpf...', 1000);
+    S.happy = Math.min(100, S.happy + 6); fx('heart', '♥'); say(pick(['hihi', '♥', 'mehr!']), 1200); evaluate();
+  });
+  dash.querySelectorAll('.card').forEach(c => c.addEventListener('click', () => {
+    if (S.hiddenBehind && S.hiddenBehind.el === c) unhide(true);
+  }));
+
+  // Demo-Steuerung
+  document.querySelectorAll('input[name=w]').forEach(i => i.onchange = async () => {
+    S.weather = i.value; evaluate();
+    if (S.weather === 'rainy' && !S.hiddenBehind) say('schirm auf!', 1500);
+    if (S.weather === 'night') { await unhide(false); say('gute nacht', 1500); }
+    if (S.weather === 'sunny' && !S.hiddenBehind) say('sonne!', 1200);
+  });
+  $('#appts').oninput = e => {
+    S.appts = +e.target.value; $('#apptN').textContent = S.appts; renderCal(); evaluate();
+    if (S.appts >= 6 && !S.hiddenBehind) say('so viele\ntermine!', 1600);
+  };
+  $('#bFeed').onclick = () => { if (!S.busy) eat(); };
+  $('#bPlay').onclick = async () => { if (S.busy) return; S.busy = true; await unhide(false); await trick(); S.happy = Math.min(100, S.happy + 25); S.energy = Math.max(0, S.energy - 8); S.busy = false; evaluate(); };
+  $('#bHide').onclick = async () => { if (S.busy) return; S.busy = true; await unhide(false); S.busy = false; hide(surfaces.find(c => c.fav)); };
+  $('#bTrick').onclick = async () => { if (S.busy) return; S.busy = true; await unhide(false); await trick(); S.busy = false; };
+  $('#bSonos').onclick = () => { S.sonos = !S.sonos; $('#sonos').classList.toggle('off', !S.sonos); $('#sonosTxt').textContent = S.sonos ? 'Läuft' : 'Pause'; if (S.sonos) say('musik!', 1200); };
+
+  const TITLES = ['Termin 9:00', 'Termin 18:30', 'Sport 14:00', 'Meeting 11:00', 'Einkaufen', 'Musik 16:00', 'Abgabe Projekt', 'Fest'];
+  function renderCal() {
+    $('#calList').innerHTML = TITLES.slice(0, S.appts).map(t => `<li>${t}</li>`).join('') || '<li style="border-color:#444;color:#777">keine Termine</li>';
+    scan();
+  }
+
+  // Start
+  renderCal(); evaluate();
+  const start = surfaces.find(c => c.name === 'Kalender');
+  place(start.x1 + 20, start.top);
+  setTimeout(() => say('hallo!', 1600), 600);
+})();
+</script>
+</body>
+</html>

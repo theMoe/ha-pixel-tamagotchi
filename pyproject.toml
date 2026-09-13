@@ -1,0 +1,22 @@
+[project]
+name = "ha-pixel-tamagotchi"
+version = "0.1.0"
+description = "Pixel – ein Tamagotchi, das auf dem Home-Assistant-Dashboard lebt"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["custom_components", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ANN"]
+ignore = ["ANN401", "RUF012"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN", "S101"]

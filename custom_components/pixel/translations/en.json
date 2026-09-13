@@ -1,0 +1,358 @@
+{
+  "title": "Pixel – Dashboard Tamagotchi",
+  "config": {
+    "step": {
+      "user": {
+        "title": "What is your pet's name?",
+        "data": {
+          "name": "Name"
+        }
+      },
+      "world": {
+        "title": "What should {name} perceive?",
+        "description": "Everything is optional. No weather means no sunglasses, no calendar means no appointment stress.",
+        "data": {
+          "weather_entity": "Weather",
+          "calendar_entities": "Calendars (stress, reminders)",
+          "media_players": "Media players (dances when music plays)",
+          "presence_entity": "Presence (zone.home or a presence sensor)"
+        }
+      },
+      "game": {
+        "title": "Game rules",
+        "data": {
+          "feeding_windows": "Feeding windows (e.g. 07:00-09:00, 12:00-14:00, 18:00-20:00)",
+          "night_start": "Bedtime",
+          "night_end": "Wake-up time",
+          "decay_speed": "Needs speed (1 = normal)",
+          "hardcore": "Hardcore mode (can die, then a new egg)"
+        }
+      }
+    },
+    "error": {
+      "invalid_feeding_windows": "Format: HH:MM-HH:MM, separate several with commas."
+    },
+    "abort": {
+      "already_configured": "A pet with this name already exists."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Perception",
+        "data": {
+          "weather_entity": "Weather",
+          "calendar_entities": "Calendars",
+          "media_players": "Media players",
+          "presence_entity": "Presence"
+        }
+      },
+      "game": {
+        "title": "Game rules",
+        "data": {
+          "feeding_windows": "Feeding windows",
+          "night_start": "Bedtime",
+          "night_end": "Wake-up time",
+          "decay_speed": "Needs speed",
+          "hardcore": "Hardcore mode"
+        }
+      }
+    },
+    "error": {
+      "invalid_feeding_windows": "Format: HH:MM-HH:MM, separate several with commas."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "hunger": {
+        "name": "Hunger"
+      },
+      "happiness": {
+        "name": "Happiness"
+      },
+      "energy": {
+        "name": "Energy"
+      },
+      "health": {
+        "name": "Health"
+      },
+      "care_score": {
+        "name": "Care score"
+      },
+      "age": {
+        "name": "Age"
+      },
+      "stage": {
+        "name": "Stage",
+        "state": {
+          "egg": "Egg",
+          "baby": "Baby",
+          "child": "Child",
+          "teen": "Teen",
+          "adult": "Adult",
+          "senior": "Senior"
+        }
+      },
+      "activity": {
+        "name": "Activity",
+        "state": {
+          "idle": "Roaming",
+          "sleeping": "Sleeping",
+          "eating": "Eating",
+          "playing": "Playing",
+          "sick": "Sick",
+          "fainted": "Fainted"
+        }
+      },
+      "outfit": {
+        "name": "Outfit"
+      },
+      "stress_level": {
+        "name": "Stress level"
+      },
+      "status": {
+        "name": "Status"
+      }
+    },
+    "binary_sensor": {
+      "needs_attention": {
+        "name": "Needs attention"
+      },
+      "sick": {
+        "name": "Sick"
+      },
+      "poop": {
+        "name": "Poop"
+      },
+      "sleeping": {
+        "name": "Sleeping"
+      },
+      "fainted": {
+        "name": "Fainted"
+      },
+      "feeding_window": {
+        "name": "Feeding time"
+      }
+    },
+    "select": {
+      "mood": {
+        "name": "Mood",
+        "state": {
+          "auto": "Automatic",
+          "happy": "Happy",
+          "excited": "Excited",
+          "bored": "Bored",
+          "busy": "Busy",
+          "stressed": "Stressed",
+          "lonely": "Lonely",
+          "hungry": "Hungry",
+          "sleeping": "Sleepy",
+          "sick": "Sick",
+          "fainted": "Fainted"
+        }
+      }
+    },
+    "switch": {
+      "animations_enabled": {
+        "name": "Animations"
+      }
+    },
+    "button": {
+      "feed": {
+        "name": "Feed"
+      },
+      "snack": {
+        "name": "Snack"
+      },
+      "treat": {
+        "name": "Treat"
+      },
+      "play": {
+        "name": "Play"
+      },
+      "pet": {
+        "name": "Pet"
+      },
+      "clean": {
+        "name": "Clean"
+      },
+      "medicine": {
+        "name": "Medicine"
+      }
+    }
+  },
+  "services": {
+    "feed": {
+      "name": "Feed",
+      "description": "Gives the pet something to eat.",
+      "fields": {
+        "meal": {
+          "name": "Meal",
+          "description": "snack, meal or treat."
+        },
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
+    },
+    "play": {
+      "name": "Play",
+      "description": "Plays with the pet (+happiness, −energy).",
+      "fields": {
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
+    },
+    "pet": {
+      "name": "Pet",
+      "description": "A little affection.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
+    },
+    "clean": {
+      "name": "Clean",
+      "description": "Removes poop.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
+    },
+    "medicine": {
+      "name": "Give medicine",
+      "description": "Heals when sick or fainted.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
+    },
+    "sleep": {
+      "name": "Put to bed",
+      "description": "Sends the pet to sleep.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
+    },
+    "wake": {
+      "name": "Wake up",
+      "description": "Wakes the pet.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
+    },
+    "set_mood": {
+      "name": "Set mood",
+      "description": "Temporarily overrides the mood. 'auto' clears the override.",
+      "fields": {
+        "mood": {
+          "name": "Mood",
+          "description": "Target mood."
+        },
+        "minutes": {
+          "name": "Duration",
+          "description": "Minutes until automatic again."
+        },
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
+    },
+    "say": {
+      "name": "Say",
+      "description": "Shows a speech bubble on the dashboard.",
+      "fields": {
+        "text": {
+          "name": "Text",
+          "description": "Short text."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Seconds."
+        },
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
+    },
+    "trick": {
+      "name": "Trick",
+      "description": "Makes the pet perform a trick on the dashboard.",
+      "fields": {
+        "trick": {
+          "name": "Trick",
+          "description": "random, tumble, jump, kick, hide or wave."
+        },
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
+    },
+    "reset": {
+      "name": "New egg",
+      "description": "Starts over with a new egg (statistics are kept).",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "New name (optional)."
+        },
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
+    }
+  },
+  "selector": {
+    "meal": {
+      "options": {
+        "snack": "Snack",
+        "meal": "Meal",
+        "treat": "Treat"
+      }
+    },
+    "mood": {
+      "options": {
+        "auto": "Automatic",
+        "happy": "Happy",
+        "excited": "Excited",
+        "bored": "Bored",
+        "busy": "Busy",
+        "stressed": "Stressed",
+        "lonely": "Lonely",
+        "hungry": "Hungry",
+        "sleeping": "Sleepy",
+        "sick": "Sick"
+      }
+    }
+  },
+  "exceptions": {
+    "action_refused": {
+      "message": "Not possible right now: {reason}"
+    },
+    "no_pet": {
+      "message": "No Pixel is set up."
+    },
+    "unknown_entry": {
+      "message": "Unknown config_entry_id."
+    }
+  }
+}

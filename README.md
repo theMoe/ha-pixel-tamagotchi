@@ -1,0 +1,269 @@
+# Pixel – ein Tamagotchi, das auf deinem Home-Assistant-Dashboard lebt
+
+Pixel läuft über dein Dashboard, klettert auf Karten, versteckt sich hinter dem Kalender, trägt bei Sonne eine Sonnenbrille und bei Regen einen Schirm, wird bei vielen Terminen hektisch und möchte ein paar Mal am Tag gefüttert werden. Das Haus ist seine Welt: Wetter, Kalender, Anwesenheit und Musik beeinflussen Stimmung, Outfit und Verhalten.
+
+Das Repository enthält **eine Integration** (Spiellogik, Entities, Services) **und eine Dashboard-Card** (Animation, Bewegung, Interaktion). Die Card wird von der Integration automatisch ausgeliefert – du musst keine Lovelace-Ressource anlegen.
+
+---
+
+## Inhalt
+
+1. [Voraussetzungen](#1-voraussetzungen)
+2. [Installation über HACS](#2-installation-über-hacs)
+3. [Manuelle Installation](#3-manuelle-installation-alternative)
+4. [Integration einrichten](#4-integration-einrichten)
+5. [Card ins Dashboard legen](#5-card-ins-dashboard-legen)
+6. [Bedienung](#6-bedienung)
+7. [Entities](#7-entities)
+8. [Services](#8-services)
+9. [Automationsbeispiele](#9-automationsbeispiele)
+10. [Card-Optionen](#10-card-optionen)
+11. [Spielregeln](#11-spielregeln)
+12. [Fehlersuche](#12-fehlersuche)
+13. [Entwicklung](#13-entwicklung)
+
+---
+
+## 1. Voraussetzungen
+
+- Home Assistant **2024.8 oder neuer** (getestet mit 2025.1, 2026.8 und 2026.9)
+- Für die Einrichtung per Klick: [HACS](https://hacs.xyz) installiert
+- Optional, aber empfohlen: eine `weather.*`-Entity, ein oder mehrere `calendar.*`-Entities, `zone.home` (ist standardmäßig vorhanden)
+
+## 2. Installation über HACS
+
+1. HACS öffnen → oben rechts **⋮** → **Benutzerdefinierte Repositories**.
+2. URL eintragen: `https://github.com/theMoe/ha-pixel-tamagotchi`, Typ **Integration**, **Hinzufügen**.
+3. In HACS nach **Pixel** suchen → **Herunterladen**.
+4. **Home Assistant neu starten** (Einstellungen → System → Neu starten).
+
+## 3. Manuelle Installation (Alternative)
+
+1. Den Ordner `custom_components/pixel` aus diesem Repository in dein HA-Konfigurationsverzeichnis kopieren, sodass `config/custom_components/pixel/manifest.json` existiert.
+2. Home Assistant neu starten.
+
+## 4. Integration einrichten
+
+1. **Einstellungen → Geräte & Dienste → Integration hinzufügen**, nach **Pixel** suchen.
+2. **Schritt 1 – Name:** Wie soll dein Tier heißen? (Standard: Pixel). Der Name bestimmt die Entity-IDs, z. B. `sensor.pixel_status`.
+3. **Schritt 2 – Wahrnehmung:** alles optional
+   - **Wetter:** deine `weather.*`-Entity → Sonnenbrille, Schirm, Mütze, Eis …
+   - **Kalender:** ein oder mehrere Kalender → Terminstress und Erinnerung 15 Minuten vor Terminen
+   - **Media-Player:** Sonos & Co. → Pixel tanzt, wenn Musik läuft
+   - **Anwesenheit:** Standard `zone.home` (zählt Personen zuhause). Alternativ ein `binary_sensor`/`input_boolean` „jemand zuhause“ → Einsamkeit, Freude beim Heimkommen, Urlaubsschutz
+4. **Schritt 3 – Spielregeln:**
+   - **Fütterungsfenster:** `07:00-09:00, 12:00-14:00, 18:00-20:00` (frei anpassbar)
+   - **Schlafenszeit / Aufstehzeit:** nachts schläft Pixel, Bedürfnisse sinken kaum
+   - **Tempo:** 1 = normal, 0,5 = gemütlich (gut für Anfang und Urlaub), 2 = fordernd
+   - **Hardcore:** aus = Pixel wird bei Vernachlässigung nur ohnmächtig; an = Pixel kann sterben und ein neues Ei schlüpft
+5. **Fertig.** Alle Einstellungen lassen sich später über **Konfigurieren** an der Integration ändern – ohne Neustart.
+
+Pixel startet als **Ei** und schlüpft nach etwa einem Tag. Danach wächst es bei guter Pflege über Baby, Kind und Teenager zum Erwachsenen (siehe [Spielregeln](#11-spielregeln)).
+
+## 5. Card ins Dashboard legen
+
+Die Card muss **einmal** in der View liegen, auf der Pixel leben soll. Sie zeigt einen kleinen Status-Chip (Name, Stimmung, drei Balken) und erzeugt das Tier als Ebene über der gesamten View.
+
+1. Dashboard öffnen → **✏️ Bearbeiten** → **Karte hinzufügen**.
+2. Nach **Pixel** suchen (unter „Benutzerdefiniert“) – oder ganz unten **Manuell** wählen und eintragen:
+
+   ```yaml
+   type: custom:pixel-card
+   entity: sensor.pixel_status
+   ```
+
+   `entity` kann weggelassen werden, wenn es nur ein Pixel gibt; die Card findet den Status-Sensor selbst.
+
+3. Speichern. Falls die Card nicht gefunden wird: Browser einmal **hart neu laden** (Strg + F5 bzw. in der Companion-App Einstellungen → Cache leeren). Die Card wird beim ersten Start der Integration registriert und erscheint erst nach dem Neuladen.
+
+**Empfehlung für Wandtablets/Kiosk:** Die Card in die Sections-View des Familien-Dashboards legen. Pixel bevorzugt Kalenderkarten zum Verstecken und meidet Bilder, Karten und Kameras.
+
+Karten lassen sich gezielt beeinflussen (Attribut am Karten-Element, z. B. über `card-mod` oder eigene Custom Cards):
+
+- `data-pixel="favorite"` – Lieblingsversteck
+- `data-pixel="noclimb"` – wird nicht betreten
+
+## 6. Bedienung
+
+| Aktion | Wirkung |
+|---|---|
+| **Tippen** auf Pixel | Menü: Füttern 🍎, Snack 🍪, Leckerli 🍬, Spielen ⚽, Streicheln ✋ – plus Putzen 🧹 / Medizin 💊, wenn nötig |
+| **Lange drücken** | Statistik: Werte, Alter, Stufe, Fütterungen (wer hat am meisten gefüttert) |
+| **Tippen** auf die Karte, hinter der Pixel steckt | Pixel springt mit „BUH!“ heraus |
+| **Tippen** auf ein Häufchen 💩 | Putzen |
+| Finger/Maus bewegen | Pixels Augen folgen |
+
+Wer füttert, wird pro HA-Benutzer gezählt (Statistik im Long-Press-Popup). Dafür muss jedes Familienmitglied mit dem eigenen HA-Account angemeldet sein.
+
+## 7. Entities
+
+Alle Entities hängen am Gerät **Pixel**. Bei anderem Namen ändert sich das Präfix.
+
+| Entity | Bedeutung |
+|---|---|
+| `sensor.pixel_status` | Stimmung als Zustand; **alle Werte als Attribute** (für Card und Templates) |
+| `sensor.pixel_hunger` | 0–100, **100 = satt** |
+| `sensor.pixel_happiness`, `sensor.pixel_energy`, `sensor.pixel_health` | Laune, Energie, Gesundheit |
+| `sensor.pixel_stage` | egg / baby / child / teen / adult / senior |
+| `sensor.pixel_activity` | idle / sleeping / eating / playing / sick / fainted |
+| `sensor.pixel_outfit` | Aktuelle Kleidung (Attribute: hat, accessory, item) |
+| `sensor.pixel_stress_level` | 0 entspannt, 1 beschäftigt (ab 3 Terminen), 2 gestresst (ab 6) |
+| `sensor.pixel_age`, `sensor.pixel_care_score` | Alter in Tagen, gleitender Pflegewert |
+| `binary_sensor.pixel_needs_attention` | Hunger, Häufchen, krank, ohnmächtig oder Fütterungszeit |
+| `binary_sensor.pixel_sick`, `_poop`, `_sleeping`, `_fainted`, `_feeding_time` | Einzelzustände |
+| `select.pixel_mood` | Stimmung anzeigen/überschreiben; `auto` = Engine entscheidet |
+| `switch.pixel_animations` | Animationen auf der Card an/aus (Kiosk-Stromsparen) |
+| `button.pixel_feed`, `_snack`, `_treat`, `_play`, `_pet`, `_clean`, `_medicine` | Aktionen ohne Card |
+
+## 8. Services
+
+Alle Services akzeptieren optional `config_entry_id`, falls mehrere Tiere existieren.
+
+| Service | Felder | Wirkung |
+|---|---|---|
+| `pixel.feed` | `meal`: snack / meal / treat | Füttern (+15 / +35 / +10 Sättigung; Leckerli +15 Laune, max. 3 pro Tag) |
+| `pixel.play` | – | +25 Laune, −8 Energie (unter 20 Energie: zu müde) |
+| `pixel.pet` | – | +5 Laune |
+| `pixel.clean` | – | Häufchen entfernen |
+| `pixel.medicine` | – | Heilt bei Krankheit/Ohnmacht, sonst „bäh“ |
+| `pixel.sleep` / `pixel.wake` | – | Manuell schlafen legen / wecken |
+| `pixel.set_mood` | `mood`, `minutes` | Stimmung zeitweise erzwingen, `auto` hebt auf |
+| `pixel.say` | `text`, `duration` | Sprechblase auf dem Dashboard |
+| `pixel.trick` | `trick`: random / tumble / jump / kick / hide / wave | Trick auf dem Dashboard |
+| `pixel.reset` | `name` | Neues Ei (Statistik bleibt) |
+
+**Events:** Die Integration feuert `pixel_event` mit `type` (z. B. `fed`, `hungry`, `poop`, `sick`, `fainted`, `evolved`, `welcome_home`, `appointment_soon`, `feeding_time`, `fell_asleep`, `woke_up`, `mood_changed`) plus Details. Darauf lassen sich Automationen bauen.
+
+## 9. Automationsbeispiele
+
+**Push-Nachricht, wenn Pixel etwas braucht (max. alle 2 Stunden):**
+
+```yaml
+alias: Pixel braucht Aufmerksamkeit
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.pixel_needs_attention
+    to: "on"
+    for: "00:10:00"
+actions:
+  - action: notify.mobile_app_dein_handy
+    data:
+      title: "Pixel"
+      message: "{{ state_attr('sensor.pixel_status', 'mood') }} – schau mal aufs Dashboard."
+mode: single
+```
+
+**Kiosk: Animationen nur, wenn jemand vor dem Display steht:**
+
+```yaml
+alias: Pixel Animationen nach Präsenz
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.flur_bewegung
+actions:
+  - action: "switch.turn_{{ 'on' if trigger.to_state.state == 'on' else 'off' }}"
+    target:
+      entity_id: switch.pixel_animations
+```
+
+**Waschmaschine fertig → Pixel sagt es:**
+
+```yaml
+alias: Pixel meldet Waschmaschine
+triggers:
+  - trigger: state
+    entity_id: sensor.waschmaschine_status
+    to: "fertig"
+actions:
+  - action: pixel.say
+    data:
+      text: "Wäsche ist fertig!"
+      duration: 8
+  - action: pixel.trick
+    data:
+      trick: jump
+```
+
+**Kurzer Jingle auf Sonos, wenn jemand heimkommt (nicht nachts):**
+
+```yaml
+alias: Pixel Heimkehr-Jingle
+triggers:
+  - trigger: event
+    event_type: pixel_event
+    event_data:
+      type: welcome_home
+conditions:
+  - condition: time
+    after: "08:00:00"
+    before: "21:00:00"
+actions:
+  - action: media_player.play_media
+    target:
+      entity_id: media_player.sonos_kueche
+    data:
+      media_content_id: media-source://media_source/local/pixel-hello.mp3
+      media_content_type: music
+```
+
+## 10. Card-Optionen
+
+```yaml
+type: custom:pixel-card
+entity: sensor.pixel_status   # optional, wird sonst automatisch gefunden
+show_status: true             # Status-Chip in der Karte anzeigen
+scale: 1                      # Größe des Tiers (0.75 – 1.5 sinnvoll)
+avoid:                        # Kartentypen, die gemieden werden (Teilstrings von hui-*-card)
+  - picture
+  - map
+  - camera
+favorites:                    # bevorzugte Verstecke
+  - calendar
+idle_min_seconds: 3           # Pause zwischen Aktionen
+idle_max_seconds: 8
+floor_margin: 12              # Abstand der Bodenlinie zum unteren Rand
+```
+
+Die Card respektiert `prefers-reduced-motion` (keine Purzelbäume) und pausiert, wenn der Tab nicht sichtbar ist.
+
+## 11. Spielregeln
+
+- **Bedürfnisse** sinken pro Stunde: Sättigung −4, Laune −2, Energie −3 (× Tempo-Faktor). Im Schlaf regeneriert Energie, Sättigung sinkt nur ein Viertel so schnell.
+- **Urlaubsschutz:** Ist das Haus länger als 4 Stunden leer, sinken alle Werte nur halb so schnell. Beim Heimkommen freut sich Pixel (+Laune).
+- **Fütterungsfenster:** Innerhalb der Fenster erinnert Pixel einmal (`feeding_time`-Event, Card-Sprechblase). Außerhalb darf trotzdem gefüttert werden.
+- **Häufchen** kommt 2 Stunden nach einer Mahlzeit und kostet Gesundheit, bis es weggeputzt ist.
+- **Gesundheit** sinkt bei Sättigung < 15 oder Häufchen; unter 30 ist Pixel **krank** (Medizin oder Erholung), bei 0 **ohnmächtig** (Medizin, dann füttern). Hardcore: stattdessen Tod und neues Ei.
+- **Stufen** (bei durchschnittlicher Pflege): Ei 1 Tag → Baby → Kind ab Tag 4 → Teenager ab Tag 11 → Erwachsen ab Tag 25 → Senior ab Tag 90. Gute Pflege beschleunigt um bis zu 30 %, schlechte verzögert bis zu 50 %.
+- **Stimmung** (Priorität): ohnmächtig › krank › schlafend › hungrig (< 30) › gestresst (≥ 6 Termine) › einsam (Haus > 4 h leer und Laune < 40) › aufgeregt (jemand kommt heim, spielt) › beschäftigt (≥ 3 Termine) › gelangweilt (> 6 h keine Interaktion) › fröhlich.
+- **Outfit:** Sonne → Sonnenbrille (+Eis ab 26 °C, +Mütze unter 8 °C); Regen/Gewitter → Schirm; Schnee → Mütze und Schal; Wind → Schal; Nebel → Laterne; 3–5 Termine → Klemmbrett; ab 6 → Kaffee; Dezember → Nikolausmütze; Ende Oktober → Kürbis; März/April am Wochenende → Hasenohren.
+- **Ausfälle:** Nach Neustarts oder Stromausfall werden höchstens 12 Stunden nachgerechnet – Pixel verhungert nicht, weil HA ein Wochenende aus war.
+
+Alle Zahlen stehen in `custom_components/pixel/engine/config.py`.
+
+## 12. Fehlersuche
+
+| Problem | Lösung |
+|---|---|
+| „Benutzerdefiniertes Element existiert nicht: pixel-card“ | Integration läuft? Browser hart neu laden (Strg + F5). In der Companion-App: Einstellungen → Companion-App → Frontend-Cache zurücksetzen. Prüfen, ob `http://<ha>:8123/pixel-static/pixel-card.js` erreichbar ist. |
+| Pixel erscheint nicht, Chip aber schon | Die Card muss in derselben View liegen. Browser-Konsole (F12) auf `[pixel-card]`-Meldungen prüfen. |
+| Pixel steht oben am Header | Karten werden erst nach dem Laden gescannt; die Card scannt nach 0,8 s nach. Bei sehr langsamen Tablets `idle_min_seconds` erhöhen. |
+| Mehrere Pixel gleichzeitig | Auf einer Seite läuft immer nur ein Tier – die erste Card gewinnt. Pro View nur eine `pixel-card` legen. |
+| Kalender wird ignoriert | Die Integration nutzt `calendar.get_events`; die Kalender-Integration muss diese Aktion unterstützen (Google, CalDAV, lokale Kalender: ja). |
+| Entity-IDs lauten anders | Die IDs folgen dem englischen Entity-Namen; bei anderem Tiernamen ändert sich das Präfix (`sensor.blob_status`). |
+| Logging | `logger: logs: custom_components.pixel: debug` in `configuration.yaml`. |
+
+## 13. Entwicklung
+
+```bash
+# Python 3.14 (HA 2026.x); die Versionskombinationen stehen in requirements_test.txt
+uv venv .venv --python 3.14 && uv pip install --python .venv/bin/python homeassistant==2026.9.0 -r requirements_test.txt
+.venv/bin/python -m pytest            # 34 Engine-Tests + 10 Integrationstests
+.venv/bin/python -m ruff check . && .venv/bin/python -m ruff format .
+cd tests/frontend && npm install && node card.smoke.test.mjs   # Card-Smoke-Test in jsdom
+```
+
+Die Suite läuft grün gegen HA 2026.9.0 und 2026.8.3 (Python 3.14) sowie 2025.1.4 (Python 3.12).
+
+`docs/card-demo.html` lädt die echte Card mit einem Mock-hass im Browser – zum Ausprobieren ohne Home Assistant. `docs/prototyp.html` ist der ursprüngliche Prototyp, `docs/KONZEPT.md` das Konzept. `PROJEKTSTAND.md` ist das Briefing für die Weiterentwicklung.
+
+Lizenz: MIT.

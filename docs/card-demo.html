@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel-Card – Demo ohne Home Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--primary-text-color:#e6e6e6;--secondary-text-color:#9a9a9a;--divider-color:#333;--success-color:#66bb6a;--warning-color:#ffb300}
+  body{margin:0;background:#111;color:#e6e6e6;font-family:Roboto,system-ui,sans-serif}
+  header{position:sticky;top:0;background:#1c1c1c;padding:12px 16px;font-weight:500;z-index:4;border-bottom:1px solid #222}
+  hui-masonry-view{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px 12px 120px}
+  ha-card{display:block;background:#1f1f1f;border-radius:12px;padding:14px;min-height:96px;box-sizing:border-box}
+  .wide{grid-column:1/-1}
+  .lbl{font-size:12px;color:#9a9a9a}.val{font-size:26px;font-weight:500;margin-top:4px}
+  .ctl{position:fixed;left:0;right:0;bottom:0;background:#0a0a0a;border-top:1px solid #222;padding:10px 12px;z-index:20;display:flex;gap:6px;flex-wrap:wrap}
+  .ctl button,.ctl select{font:inherit;font-size:13px;background:#1f1f1f;color:#e6e6e6;border:1px solid #333;border-radius:8px;padding:7px 10px}
+</style>
+</head>
+<body>
+<header>Zuhause · Card-Demo</header>
+
+<!-- Die Demo imitiert die Lovelace-Struktur nur so weit, wie die Card sie braucht: eine *-view mit ha-card-Elementen. -->
+<hui-masonry-view>
+  <hui-weather-forecast-card><ha-card><div class="lbl">Zuhause</div><div class="val">☀️ 24 °C</div></ha-card></hui-weather-forecast-card>
+  <hui-tile-card><ha-card><div class="lbl">Wohnzimmer</div><div class="val">21,5 °C</div></ha-card></hui-tile-card>
+  <hui-calendar-card class="wide"><ha-card><div class="lbl">Heute</div><div>Termin 9:00 · Termin 18:30</div></ha-card></hui-calendar-card>
+  <hui-entities-card><ha-card><div class="lbl">Familie</div><div class="val">3 zuhause</div></ha-card></hui-entities-card>
+  <hui-media-control-card><ha-card><div class="lbl">Sonos Küche</div><div class="val">Pause</div></ha-card></hui-media-control-card>
+  <pixel-card id="card" class="wide"></pixel-card>
+</hui-masonry-view>
+
+<div class="ctl">
+  <button data-svc="feed">🍎 feed</button>
+  <button data-svc="play">⚽ play</button>
+  <button data-svc="pet">✋ pet</button>
+  <button data-ev="appointment_soon">📅 Termin-Event</button>
+  <button data-ev="welcome_home">🏠 Heimkehr</button>
+  <button data-ev="say">💬 say</button>
+  <button data-ev="trick">🤸 trick</button>
+  <select id="weather"><option value="sunny">sunny</option><option value="rainy">rainy</option><option value="snowy">snowy</option></select>
+  <select id="stage"><option>egg</option><option selected>adult</option><option>baby</option><option>senior</option></select>
+  <label><input type="checkbox" id="sleep"> sleeping</label>
+  <label><input type="checkbox" id="anim" checked> animations</label>
+</div>
+
+<script src="../custom_components/pixel/frontend/pixel-card.js"></script>
+<script>
+  // --------- Mock von hass (nur was die Card verwendet)
+  const listeners = [];
+  const status = {
+    entry_id: "demo", name: "Pixel", stage: "adult", mood: "happy", activity: "idle",
+    outfit: { hat: "", accessory: "sunglasses", item: "" }, hunger: 70, happiness: 75, energy: 85, health: 100,
+    sleeping: false, sick: false, fainted: false, poop_count: 0, stress_level: 1, weather: "sunny",
+    media_playing: false, animations_enabled: true, total_feeds: 3, feeds_by_user: { Alex: 2, Sam: 1 }, age_days: 12,
+  };
+  const OUTFITS = { sunny: { accessory: "sunglasses" }, rainy: { item: "umbrella" }, snowy: { hat: "beanie", accessory: "scarf" } };
+  function makeHass() {
+    return {
+      locale: { language: "de" },
+      states: { "sensor.pixel_status": { state: status.mood, attributes: { ...status, outfit: { ...status.outfit } } } },
+      formatEntityState: (s) => s.state,
+      connection: { subscribeEvents: (cb, type) => { listeners.push(cb); return Promise.resolve(() => {}); } },
+      callService: async (domain, service, data) => {
+        console.log("callService", domain, service, data);
+        if (service === "feed") { status.hunger = Math.min(100, status.hunger + 35); status.activity = "eating"; fire("fed"); setTimeout(() => { status.activity = "idle"; push(); status.poop_count++; fire("poop"); push(); }, 4000); }
+        if (service === "play") { status.happiness = Math.min(100, status.happiness + 25); status.activity = "playing"; fire("played"); setTimeout(() => { status.activity = "idle"; push(); }, 3000); }
+        if (service === "pet") fire("petted");
+        if (service === "clean") { status.poop_count = 0; fire("cleaned"); }
+        push();
+      },
+    };
+  }
+  const card = document.getElementById("card");
+  function push() { status.mood = status.sleeping ? "sleeping" : status.hunger < 30 ? "hungry" : "happy"; card.hass = makeHass(); }
+  function fire(type, data = {}) { listeners.forEach((cb) => cb({ data: { entry_id: "demo", type, ...data } })); }
+
+  card.setConfig({ entity: "sensor.pixel_status", show_status: true });
+  push();
+
+  document.querySelectorAll("[data-svc]").forEach((b) => (b.onclick = () => makeHass().callService("pixel", b.dataset.svc, {})));
+  document.querySelector('[data-ev="appointment_soon"]').onclick = () => fire("appointment_soon", { title: "Termin A", minutes: 12 });
+  document.querySelector('[data-ev="welcome_home"]').onclick = () => fire("welcome_home", { away_hours: 3 });
+  document.querySelector('[data-ev="say"]').onclick = () => fire("say", { text: "Hallo Familie!", duration: 3 });
+  document.querySelector('[data-ev="trick"]').onclick = () => fire("trick", { trick: "random" });
+  document.getElementById("weather").onchange = (e) => { status.weather = e.target.value; status.outfit = { hat: "", accessory: "", item: "", ...OUTFITS[e.target.value] }; push(); };
+  document.getElementById("stage").onchange = (e) => { status.stage = e.target.value; push(); };
+  document.getElementById("sleep").onchange = (e) => { status.sleeping = e.target.checked; status.outfit = e.target.checked ? { hat: "sleep_cap", accessory: "", item: "" } : { hat: "", accessory: "", item: "", ...OUTFITS[status.weather] }; push(); };
+  document.getElementById("anim").onchange = (e) => { status.animations_enabled = e.target.checked; push(); };
+  setInterval(() => { status.hunger = Math.max(0, status.hunger - 1); push(); }, 3000);
+</script>
+</body>
+</html>

@@ -1,0 +1,315 @@
+"""Tick-Regeln: Jede Regel ändert genau einen Aspekt des Zustands pro Tick.
+
+Neue Mechaniken werden als weitere Regel-Klasse ergänzt und in
+``PetEngine`` registriert - bestehende Regeln bleiben unangetastet.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import timedelta
+from typing import Protocol
+
+from .config import GameConfig
+from .models import STAGE_ORDER, Activity, GameEvent, Mood, PetState, Stage, WorldContext
+
+
+def clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
+    return max(low, min(high, value))
+
+
+@dataclass
+class TickContext:
+    """Alles, was eine Regel während eines Ticks braucht."""
+
+    state: PetState
+    world: WorldContext
+    cfg: GameConfig
+    dt_hours: float
+    events: list[GameEvent] = field(default_factory=list)
+
+    def emit(self, event_type: str, **data: object) -> None:
+        self.events.append(GameEvent(event_type, dict(data)))
+
+
+class Rule(Protocol):
+    """Schnittstelle einer Tick-Regel."""
+
+    def apply(self, ctx: TickContext) -> None: ...
+
+
+# --------------------------------------------------------------------------- Regeln
+
+
+class DayResetRule:
+    """Setzt Tageszähler zurück, wenn ein neuer (lokaler) Tag begonnen hat."""
+
+    def apply(self, ctx: TickContext) -> None:
+        key = ctx.state.treats_day_key(ctx.world.local_now)
+        if ctx.state.treats_day != key:
+            ctx.state.treats_day = key
+            ctx.state.treats_today = 0
+
+
+class PresenceRule:
+    """Merkt sich, seit wann das Haus leer ist, und meldet Heimkehr."""
+
+    def apply(self, ctx: TickContext) -> None:
+        s, w = ctx.state, ctx.world
+        if w.persons_home is None:
+            return
+        if w.house_empty:
+            if s.house_empty_since is None:
+                s.house_empty_since = w.now
+        elif s.house_empty_since is not None:
+            away_hours = (w.now - s.house_empty_since).total_seconds() / 3600
+            s.house_empty_since = None
+            if away_hours >= 1:
+                s.happiness = clamp(s.happiness + min(20.0, away_hours * 2))
+                ctx.emit("welcome_home", away_hours=round(away_hours, 1))
+
+
+class SleepRule:
+    """Entscheidet, ob das Tier schläft (manuell, Nacht oder erschöpft)."""
+
+    def apply(self, ctx: TickContext) -> None:
+        s, cfg = ctx.state, ctx.cfg
+        night = cfg.is_night(ctx.world.local_now.time())
+
+        # Manueller Eingriff verfällt mit Ende der Nacht bzw. wenn ausgeschlafen.
+        if s.sleeping_manual is True and not night and s.energy >= cfg.rested_threshold:
+            s.sleeping_manual = None
+        if s.sleeping_manual is False and night:
+            s.sleeping_manual = None
+
+        if s.sleeping_manual is not None:
+            sleeping = s.sleeping_manual
+        elif s.fainted:
+            sleeping = False
+        elif s.sleeping:
+            sleeping = night or s.energy < cfg.rested_threshold
+        else:
+            sleeping = night or s.energy < cfg.low_energy_threshold
+
+        if sleeping != s.sleeping:
+            s.sleeping = sleeping
+            ctx.emit("fell_asleep" if sleeping else "woke_up")
+
+
+class NeedsDecayRule:
+    """Hunger, Laune und Energie verändern sich mit der Zeit."""
+
+    def apply(self, ctx: TickContext) -> None:
+        s, w, cfg, dt = ctx.state, ctx.world, ctx.cfg, ctx.dt_hours
+        if s.fainted:
+            return
+
+        factor = 1.0
+        if s.house_empty_since is not None:
+            empty_hours = (w.now - s.house_empty_since).total_seconds() / 3600
+            if empty_hours >= cfg.empty_house_slowdown_after_hours:
+                factor = cfg.empty_house_decay_factor  # Urlaubsschutz
+
+        if s.sleeping:
+            s.hunger = clamp(s.hunger - cfg.hunger_decay * 0.25 * dt * factor)
+            s.energy = clamp(s.energy + cfg.energy_regen_sleeping * dt)
+            return
+
+        s.hunger = clamp(s.hunger - cfg.hunger_decay * dt * factor)
+        s.energy = clamp(s.energy - cfg.energy_decay * dt * factor)
+
+        happiness_decay = cfg.happiness_decay
+        if w.appointments_24h >= cfg.stress_high_appointments:
+            happiness_decay += cfg.happiness_extra_decay_stressed
+        if s.house_empty_since is not None and s.happiness < cfg.lonely_happiness_threshold + 20:
+            happiness_decay += cfg.happiness_extra_decay_lonely
+        s.happiness = clamp(s.happiness - happiness_decay * dt * factor)
+
+
+class HungerEventRule:
+    """Meldet Schwellenübergänge beim Hunger (für Automationen)."""
+
+    def __init__(self) -> None:
+        self._was_hungry: bool | None = None
+
+    def apply(self, ctx: TickContext) -> None:
+        hungry = ctx.state.hunger < ctx.cfg.hungry_threshold
+        if self._was_hungry is not None and hungry and not self._was_hungry:
+            ctx.emit("hungry", hunger=round(ctx.state.hunger))
+        self._was_hungry = hungry
+
+
+class PoopRule:
+    """Nach einer Mahlzeit muss irgendwann ein Häufchen kommen."""
+
+    def apply(self, ctx: TickContext) -> None:
+        s = ctx.state
+        if s.poop_due_at is not None and ctx.world.now >= s.poop_due_at:
+            s.poop_due_at = None
+            s.poop_count += 1
+            ctx.emit("poop", count=s.poop_count)
+
+
+class HealthRule:
+    """Gesundheit sinkt bei Vernachlässigung, regeneriert sonst. Steuert krank/ohnmächtig."""
+
+    def apply(self, ctx: TickContext) -> None:
+        s, cfg, dt = ctx.state, ctx.cfg, ctx.dt_hours
+        if s.fainted:
+            return
+
+        damage = 0.0
+        if s.hunger < cfg.starving_threshold:
+            damage += cfg.health_damage_hungry
+        if s.poop_count > 0:
+            damage += cfg.health_damage_poop * s.poop_count
+
+        if damage:
+            s.health = clamp(s.health - damage * dt)
+        else:
+            s.health = clamp(s.health + cfg.health_regen * dt)
+
+        if not s.is_sick and s.health < cfg.sick_threshold:
+            s.sick_since = ctx.world.now
+            ctx.emit("sick", health=round(s.health))
+        elif s.is_sick and s.health >= cfg.recovered_threshold:
+            s.sick_since = None
+            ctx.emit("recovered", health=round(s.health))
+
+        if s.health <= 0:
+            if cfg.hardcore:
+                ctx.emit("died", generation=s.generation, age_days=s.age_days(ctx.world.now))
+                _rebirth(s, ctx)
+            else:
+                s.fainted = True
+                s.sleeping = False
+                ctx.emit("fainted")
+
+
+def _rebirth(s: PetState, ctx: TickContext) -> None:
+    """Hardcore: neues Ei, Statistik bleibt."""
+    fresh = PetState(name=s.name, generation=s.generation + 1, born_at=ctx.world.now)
+    fresh.total_feeds = s.total_feeds
+    fresh.total_plays = s.total_plays
+    fresh.feeds_by_user = dict(s.feeds_by_user)
+    fresh.animations_enabled = s.animations_enabled
+    for key, value in fresh.__dict__.items():
+        setattr(s, key, value)
+
+
+class CareScoreRule:
+    """Gleitender Pflegewert - beeinflusst, wie schnell das Tier heranwächst."""
+
+    def apply(self, ctx: TickContext) -> None:
+        s, dt = ctx.state, ctx.dt_hours
+        current = (s.hunger + s.happiness + s.health) / 3
+        # Zeitkonstante ~24 h: alter Wert wird langsam durch aktuellen ersetzt.
+        weight = min(1.0, dt / 24.0)
+        s.care_score = clamp(s.care_score * (1 - weight) + current * weight)
+
+
+class StageRule:
+    """Wachstum in Lebensstufen, beschleunigt oder verzögert durch Pflege."""
+
+    def apply(self, ctx: TickContext) -> None:
+        s, cfg = ctx.state, ctx.cfg
+        age = s.age_days(ctx.world.now)
+        care_ratio = (s.care_score - 50) / 50  # -1 .. +1
+        speed = 1 + (cfg.care_speed_bonus * care_ratio if care_ratio > 0 else cfg.care_speed_penalty * care_ratio)
+        effective_age = age * max(0.1, speed)
+
+        target = Stage.EGG
+        for stage in STAGE_ORDER:
+            if effective_age >= cfg.stage_days[stage]:
+                target = stage
+        if STAGE_ORDER.index(target) > STAGE_ORDER.index(s.stage):
+            s.stage = target
+            ctx.emit("evolved", stage=str(target), age_days=age)
+
+
+class ActivityExpiryRule:
+    """Zeitlich begrenzte Aktivitäten (essen, spielen) enden von selbst."""
+
+    def apply(self, ctx: TickContext) -> None:
+        s = ctx.state
+        if s.activity_until is not None and ctx.world.now >= s.activity_until:
+            s.activity = Activity.IDLE
+            s.activity_until = None
+
+
+class MoodOverrideExpiryRule:
+    """Manuell gesetzte Stimmungen laufen ab."""
+
+    def apply(self, ctx: TickContext) -> None:
+        s = ctx.state
+        if s.mood_override_until is not None and ctx.world.now >= s.mood_override_until:
+            s.mood_override = None
+            s.mood_override_until = None
+
+
+class AppointmentRule:
+    """Kurz vor einem Termin einmalig erinnern."""
+
+    def apply(self, ctx: TickContext) -> None:
+        s, w, cfg = ctx.state, ctx.world, ctx.cfg
+        event = w.next_event
+        if event is None or event.all_day or s.sleeping:
+            return
+        until = event.start - w.now
+        in_window = timedelta(0) <= until <= timedelta(minutes=cfg.appointment_warn_minutes)
+        if in_window and s.announced_event_uid != event.uid:
+            s.announced_event_uid = event.uid
+            ctx.emit("appointment_soon", title=event.title, minutes=int(until.total_seconds() // 60))
+
+
+class FeedingReminderRule:
+    """Erinnert einmal pro Fütterungsfenster, wenn noch nicht gefüttert wurde."""
+
+    def __init__(self) -> None:
+        self._reminded_window: str | None = None
+
+    def apply(self, ctx: TickContext) -> None:
+        s, w, cfg = ctx.state, ctx.world, ctx.cfg
+        window = cfg.in_feeding_window(w.local_now.time())
+        if window is None or s.sleeping or s.fainted:
+            self._reminded_window = None
+            return
+        key = f"{w.local_now.date()}-{window.start}"
+        if self._reminded_window == key:
+            return
+        if not _fed_in_window(s, w, window):
+            self._reminded_window = key
+            ctx.emit("feeding_time", window_start=window.start.isoformat(), hunger=round(s.hunger))
+
+
+def _fed_in_window(s: PetState, w: WorldContext, window) -> bool:  # noqa: ANN001
+    if s.last_fed is None:
+        return False
+    offset = w.local_now.utcoffset() or timedelta(0)
+    window_start_local = w.local_now.replace(
+        hour=window.start.hour, minute=window.start.minute, second=0, microsecond=0
+    )
+    window_start_utc = window_start_local - offset
+    return s.last_fed.replace(tzinfo=None) >= window_start_utc.replace(tzinfo=None)
+
+
+def default_rules() -> list[Rule]:
+    """Standardreihenfolge der Regeln - die Reihenfolge ist Teil der Semantik."""
+    return [
+        DayResetRule(),
+        PresenceRule(),
+        SleepRule(),
+        NeedsDecayRule(),
+        HungerEventRule(),
+        PoopRule(),
+        HealthRule(),
+        CareScoreRule(),
+        StageRule(),
+        ActivityExpiryRule(),
+        MoodOverrideExpiryRule(),
+        AppointmentRule(),
+        FeedingReminderRule(),
+    ]
+
+
+__all__ = ["Mood", "Rule", "TickContext", "clamp", "default_rules"]

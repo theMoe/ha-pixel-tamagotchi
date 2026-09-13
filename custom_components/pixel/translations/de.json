@@ -1,0 +1,358 @@
+{
+  "title": "Pixel – Dashboard-Tamagotchi",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Wie soll dein Tier heißen?",
+        "data": {
+          "name": "Name"
+        }
+      },
+      "world": {
+        "title": "Was soll {name} wahrnehmen?",
+        "description": "Alle Angaben sind optional. Ohne Wetter gibt es keine Sonnenbrille, ohne Kalender keinen Terminstress.",
+        "data": {
+          "weather_entity": "Wetter",
+          "calendar_entities": "Kalender (Terminstress, Erinnerungen)",
+          "media_players": "Media-Player (tanzt, wenn Musik läuft)",
+          "presence_entity": "Anwesenheit (zone.home oder ein Anwesenheits-Sensor)"
+        }
+      },
+      "game": {
+        "title": "Spielregeln",
+        "data": {
+          "feeding_windows": "Fütterungsfenster (z. B. 07:00-09:00, 12:00-14:00, 18:00-20:00)",
+          "night_start": "Schlafenszeit",
+          "night_end": "Aufstehzeit",
+          "decay_speed": "Tempo der Bedürfnisse (1 = normal)",
+          "hardcore": "Hardcore-Modus (kann sterben, dann neues Ei)"
+        }
+      }
+    },
+    "error": {
+      "invalid_feeding_windows": "Format: HH:MM-HH:MM, mehrere durch Komma getrennt."
+    },
+    "abort": {
+      "already_configured": "Ein Tier mit diesem Namen gibt es schon."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Wahrnehmung",
+        "data": {
+          "weather_entity": "Wetter",
+          "calendar_entities": "Kalender",
+          "media_players": "Media-Player",
+          "presence_entity": "Anwesenheit"
+        }
+      },
+      "game": {
+        "title": "Spielregeln",
+        "data": {
+          "feeding_windows": "Fütterungsfenster",
+          "night_start": "Schlafenszeit",
+          "night_end": "Aufstehzeit",
+          "decay_speed": "Tempo der Bedürfnisse",
+          "hardcore": "Hardcore-Modus"
+        }
+      }
+    },
+    "error": {
+      "invalid_feeding_windows": "Format: HH:MM-HH:MM, mehrere durch Komma getrennt."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "hunger": {
+        "name": "Hunger"
+      },
+      "happiness": {
+        "name": "Laune"
+      },
+      "energy": {
+        "name": "Energie"
+      },
+      "health": {
+        "name": "Gesundheit"
+      },
+      "care_score": {
+        "name": "Pflegewert"
+      },
+      "age": {
+        "name": "Alter"
+      },
+      "stage": {
+        "name": "Stufe",
+        "state": {
+          "egg": "Ei",
+          "baby": "Baby",
+          "child": "Kind",
+          "teen": "Teenager",
+          "adult": "Erwachsen",
+          "senior": "Senior"
+        }
+      },
+      "activity": {
+        "name": "Aktivität",
+        "state": {
+          "idle": "Unterwegs",
+          "sleeping": "Schläft",
+          "eating": "Isst",
+          "playing": "Spielt",
+          "sick": "Krank",
+          "fainted": "Ohnmächtig"
+        }
+      },
+      "outfit": {
+        "name": "Outfit"
+      },
+      "stress_level": {
+        "name": "Stresslevel"
+      },
+      "status": {
+        "name": "Status"
+      }
+    },
+    "binary_sensor": {
+      "needs_attention": {
+        "name": "Braucht Aufmerksamkeit"
+      },
+      "sick": {
+        "name": "Krank"
+      },
+      "poop": {
+        "name": "Häufchen"
+      },
+      "sleeping": {
+        "name": "Schläft"
+      },
+      "fainted": {
+        "name": "Ohnmächtig"
+      },
+      "feeding_window": {
+        "name": "Fütterungszeit"
+      }
+    },
+    "select": {
+      "mood": {
+        "name": "Stimmung",
+        "state": {
+          "auto": "Automatisch",
+          "happy": "Fröhlich",
+          "excited": "Aufgeregt",
+          "bored": "Gelangweilt",
+          "busy": "Beschäftigt",
+          "stressed": "Gestresst",
+          "lonely": "Einsam",
+          "hungry": "Hungrig",
+          "sleeping": "Schläfrig",
+          "sick": "Krank",
+          "fainted": "Ohnmächtig"
+        }
+      }
+    },
+    "switch": {
+      "animations_enabled": {
+        "name": "Animationen"
+      }
+    },
+    "button": {
+      "feed": {
+        "name": "Füttern"
+      },
+      "snack": {
+        "name": "Snack geben"
+      },
+      "treat": {
+        "name": "Leckerli geben"
+      },
+      "play": {
+        "name": "Spielen"
+      },
+      "pet": {
+        "name": "Streicheln"
+      },
+      "clean": {
+        "name": "Putzen"
+      },
+      "medicine": {
+        "name": "Medizin geben"
+      }
+    }
+  },
+  "services": {
+    "feed": {
+      "name": "Füttern",
+      "description": "Gibt dem Tier etwas zu essen.",
+      "fields": {
+        "meal": {
+          "name": "Mahlzeit",
+          "description": "snack, meal oder treat."
+        },
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
+    },
+    "play": {
+      "name": "Spielen",
+      "description": "Spielt mit dem Tier (+Laune, −Energie).",
+      "fields": {
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
+    },
+    "pet": {
+      "name": "Streicheln",
+      "description": "Kleine Zuwendung.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
+    },
+    "clean": {
+      "name": "Putzen",
+      "description": "Räumt Häufchen weg.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
+    },
+    "medicine": {
+      "name": "Medizin geben",
+      "description": "Heilt, wenn krank oder ohnmächtig.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
+    },
+    "sleep": {
+      "name": "Schlafen legen",
+      "description": "Schickt das Tier ins Bett.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
+    },
+    "wake": {
+      "name": "Aufwecken",
+      "description": "Weckt das Tier.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
+    },
+    "set_mood": {
+      "name": "Stimmung setzen",
+      "description": "Überschreibt die Stimmung zeitweise. 'auto' hebt die Überschreibung auf.",
+      "fields": {
+        "mood": {
+          "name": "Stimmung",
+          "description": "Zielstimmung."
+        },
+        "minutes": {
+          "name": "Dauer",
+          "description": "Minuten, danach wieder automatisch."
+        },
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
+    },
+    "say": {
+      "name": "Sagen",
+      "description": "Zeigt eine Sprechblase auf dem Dashboard.",
+      "fields": {
+        "text": {
+          "name": "Text",
+          "description": "Kurzer Text."
+        },
+        "duration": {
+          "name": "Dauer",
+          "description": "Sekunden."
+        },
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
+    },
+    "trick": {
+      "name": "Trick",
+      "description": "Lässt das Tier auf dem Dashboard einen Trick machen.",
+      "fields": {
+        "trick": {
+          "name": "Trick",
+          "description": "random, tumble, jump, kick, hide oder wave."
+        },
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
+    },
+    "reset": {
+      "name": "Neues Ei",
+      "description": "Startet mit einem neuen Ei (Statistik bleibt).",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Neuer Name (optional)."
+        },
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
+    }
+  },
+  "selector": {
+    "meal": {
+      "options": {
+        "snack": "Snack",
+        "meal": "Mahlzeit",
+        "treat": "Leckerli"
+      }
+    },
+    "mood": {
+      "options": {
+        "auto": "Automatisch",
+        "happy": "Fröhlich",
+        "excited": "Aufgeregt",
+        "bored": "Gelangweilt",
+        "busy": "Beschäftigt",
+        "stressed": "Gestresst",
+        "lonely": "Einsam",
+        "hungry": "Hungrig",
+        "sleeping": "Schläfrig",
+        "sick": "Krank"
+      }
+    }
+  },
+  "exceptions": {
+    "action_refused": {
+      "message": "Das geht gerade nicht: {reason}"
+    },
+    "no_pet": {
+      "message": "Es ist kein Pixel eingerichtet."
+    },
+    "unknown_entry": {
+      "message": "Unbekannte config_entry_id."
+    }
+  }
+}
