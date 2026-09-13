@@ -6,3 +6,4 @@ __pycache__/
 *.zip
 node_modules/
 package-lock.json
+.DS_Store
