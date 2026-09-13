@@ -13,6 +13,10 @@
   ha-card{display:block;background:#1f1f1f;border-radius:12px;padding:14px;min-height:96px;box-sizing:border-box}
   .wide{grid-column:1/-1}
   .lbl{font-size:12px;color:#9a9a9a}.val{font-size:26px;font-weight:500;margin-top:4px}
+  /* Imitiert hui-horizontal-stack-card: gleiche Anteile, Kinder duerfen unter ihre Mindestbreite schrumpfen. */
+  .hstack{grid-column:1/-1;display:flex;gap:8px}
+  .hstack>*{flex:1 1 0;min-width:0}
+  .hstack ha-card{min-height:52px;padding:8px 10px;display:flex;align-items:center;font-size:13px}
   .ctl{position:fixed;left:0;right:0;bottom:0;background:#0a0a0a;border-top:1px solid #222;padding:10px 12px;z-index:20;display:flex;gap:6px;flex-wrap:wrap}
   .ctl button,.ctl select{font:inherit;font-size:13px;background:#1f1f1f;color:#e6e6e6;border:1px solid #333;border-radius:8px;padding:7px 10px}
 </style>
@@ -28,6 +32,15 @@
   <hui-entities-card><ha-card><div class="lbl">Familie</div><div class="val">3 zuhause</div></ha-card></hui-entities-card>
   <hui-media-control-card><ha-card><div class="lbl">Sonos Küche</div><div class="val">Pause</div></ha-card></hui-media-control-card>
   <pixel-card id="card" class="wide"></pixel-card>
+
+  <!-- Enger Container: hier lief der Chip frueher aus dem Kartenhintergrund heraus. -->
+  <div class="hstack">
+    <hui-button-card><ha-card>Fenster</ha-card></hui-button-card>
+    <hui-button-card><ha-card>Zuhause</ha-card></hui-button-card>
+    <hui-button-card><ha-card>Garten</ha-card></hui-button-card>
+    <hui-button-card><ha-card>Musik</ha-card></hui-button-card>
+    <pixel-card id="card2"></pixel-card>
+  </div>
 </hui-masonry-view>
 
 <div class="ctl">
@@ -46,6 +59,19 @@
 
 <script src="../custom_components/pixel/frontend/pixel-card.js"></script>
 <script>
+  // --------- Minimales ha-card, damit der Kartenhintergrund auch im Shadow-Root der Card sichtbar ist.
+  // In echtem HA liefert ha-card den Hintergrund; ohne Definition bliebe er hier unsichtbar
+  // und genau der gemeldete Fehler (Inhalt ragt ueber den Hintergrund) waere nicht erkennbar.
+  if (!customElements.get("ha-card")) {
+    customElements.define("ha-card", class extends HTMLElement {
+      connectedCallback() {
+        if (this.shadowRoot) return;
+        this.attachShadow({ mode: "open" }).innerHTML =
+          "<style>:host{display:block;background:#1f1f1f;border-radius:12px;box-sizing:border-box}</style><slot></slot>";
+      }
+    });
+  }
+
   // --------- Mock von hass (nur was die Card verwendet)
   const listeners = [];
   const status = {
@@ -72,10 +98,12 @@
     };
   }
   const card = document.getElementById("card");
-  function push() { status.mood = status.sleeping ? "sleeping" : status.hunger < 30 ? "hungry" : "happy"; card.hass = makeHass(); }
+  const card2 = document.getElementById("card2"); // nur Chip; das Tier haelt bereits card (__pixelOverlayOwner)
+  function push() { status.mood = status.sleeping ? "sleeping" : status.hunger < 30 ? "hungry" : "happy"; const h = makeHass(); card.hass = h; card2.hass = h; }
   function fire(type, data = {}) { listeners.forEach((cb) => cb({ data: { entry_id: "demo", type, ...data } })); }
 
   card.setConfig({ entity: "sensor.pixel_status", show_status: true });
+  card2.setConfig({ entity: "sensor.pixel_status", show_status: true });
   push();
 
   document.querySelectorAll("[data-svc]").forEach((b) => (b.onclick = () => makeHass().callService("pixel", b.dataset.svc, {})));

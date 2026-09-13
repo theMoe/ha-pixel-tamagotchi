@@ -67,6 +67,19 @@ assert.ok(overlay, "Overlay am body");
 assert.ok(overlay.querySelector(".pixel-pet svg"), "SVG-Rig gerendert");
 assert.equal(card._config.entity, "sensor.pixel_status", "Status-Entity automatisch erkannt");
 assert.ok(card.shadowRoot.querySelector(".chip-name").textContent.includes("Pixel"), "Chip zeigt Namen");
+
+// Chip-Layout: jsdom kann kein Layout, daher wird das CSS strukturell geprüft.
+// Ohne diese Regeln lief der Chip in engen Containern (horizontal-stack) aus dem Kartenhintergrund heraus.
+const chipCss = card.shadowRoot.querySelector("style").textContent;
+assert.match(chipCss, /:host\s*\{[^}]*display:\s*block/, ":host ist display:block");
+assert.match(chipCss, /:host\s*\{[^}]*container-type:\s*inline-size/, ":host ist Query-Container");
+assert.match(chipCss, /ha-card\s*\{[^}]*overflow:\s*hidden/, "ha-card schneidet überstehenden Inhalt ab");
+assert.equal(chipCss.match(/@container/g).length, 3, "drei Abrüst-Stufen für enge Container");
+assert.ok(!card.classList.contains("pixel-no-chip"), "Host sichtbar, solange show_status gilt");
+
+const hidden = document.createElement("pixel-card");
+hidden.setConfig({ entity: "sensor.pixel_status", show_status: false });
+assert.ok(hidden.classList.contains("pixel-no-chip"), "ohne Chip wird der Host selbst ausgeblendet");
 assert.ok(overlay.querySelector(".acc-sunglasses.on"), "Sonnenbrille aktiv");
 assert.ok(overlay.querySelector(".fx-sweat.on"), "Schweiß bei Stress");
 assert.equal(overlay.querySelectorAll(".pixel-poop").length, 1, "ein Häufchen gerendert");

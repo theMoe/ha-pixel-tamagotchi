@@ -226,6 +226,8 @@ floor_margin: 12              # Abstand der Bodenlinie zum unteren Rand
 
 Die Card respektiert `prefers-reduced-motion` (keine Purzelbäume) und pausiert, wenn der Tab nicht sichtbar ist.
 
+**Status-Chip in engen Containern:** In `horizontal-stack` oder `custom:stack-in-card` bekommt jede Karte per `flex: 1 1 0` nur einen gleichen Anteil der Zeile. Der Chip rüstet dann stufenweise ab – erst fallen die drei Balken weg, dann Name und Stimmung, zuletzt bleibt nur das Tier. Wer den vollen Chip sehen will, gibt der Card eine eigene Zeile oder in der Sections-View eigene `grid_options`. Geht es ohnehin nur um das Tier auf dem Dashboard, ist `show_status: false` die sauberste Lösung – dann verschwindet die Karte vollständig aus dem Layout.
+
 ## 11. Spielregeln
 
 - **Bedürfnisse** sinken pro Stunde: Sättigung −4, Laune −2, Energie −3 (× Tempo-Faktor). Im Schlaf regeneriert Energie, Sättigung sinkt nur ein Viertel so schnell.

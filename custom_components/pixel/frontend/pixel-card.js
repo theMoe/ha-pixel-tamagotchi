@@ -916,16 +916,25 @@ class Brain {
 /* ------------------------------------------------------------------ Card */
 
 const CARD_CSS = `
-  ha-card { padding:10px 14px; display:flex; align-items:center; gap:12px; min-height:52px; box-sizing:border-box; }
+  /* Ohne :host wäre das Element display:inline und hätte keinen Breitenvertrag zum Container. */
+  :host { display:block; container-type:inline-size; }
+  :host(.pixel-no-chip) { display:none; }
+  ha-card { padding:10px 14px; display:flex; align-items:center; gap:12px; min-height:52px; box-sizing:border-box; width:100%; overflow:hidden; }
   .chip-pet { width:40px; height:40px; flex:none; }
-  .chip-text { flex:1; min-width:0; }
+  .chip-text { flex:1 1 auto; min-width:0; }
   .chip-name { font-weight:500; }
   .chip-mood { color:var(--secondary-text-color); font-size:12px; }
-  .chip-bars { display:flex; gap:6px; }
+  .chip-name, .chip-mood { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chip-bars { display:flex; gap:6px; flex:none; }
   .chip-bar { width:34px; height:5px; background:var(--divider-color,#444); border-radius:3px; overflow:hidden; }
   .chip-bar b { display:block; height:100%; background:var(--success-color,#66bb6a); }
   .chip-bar b.low { background:var(--warning-color,#ffb300); }
   .chip-hidden { display:none; }
+  /* Enge Container (z. B. horizontal-stack) geben der Card nur einen Bruchteil der Zeile.
+     Dann stufenweise abrüsten, statt über den Kartenrand hinauszulaufen. */
+  @container (max-width: 210px) { .chip-bars { display:none; } }
+  @container (max-width: 110px) { .chip-text { display:none; } }
+  @container (max-width: 70px) { ha-card { padding:6px; gap:0; } .chip-pet { width:28px; height:28px; } }
 `;
 
 class PixelCard extends HTMLElement {
@@ -1140,6 +1149,8 @@ class PixelCard extends HTMLElement {
 
   _renderChip(attrs) {
     if (!this.shadowRoot) return;
+    // Host mitschalten, sonst bleibt ohne Chip ein leeres Flex-Item in der Zeile stehen.
+    this.classList.toggle("pixel-no-chip", !this._config.show_status);
     if (!this._config.show_status) {
       this.shadowRoot.innerHTML = `<style>${CARD_CSS}</style><ha-card class="chip-hidden"></ha-card>`;
       return;
