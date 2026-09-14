@@ -74,8 +74,47 @@ const chipCss = card.shadowRoot.querySelector("style").textContent;
 assert.match(chipCss, /:host\s*\{[^}]*display:\s*block/, ":host ist display:block");
 assert.match(chipCss, /:host\s*\{[^}]*container-type:\s*inline-size/, ":host ist Query-Container");
 assert.match(chipCss, /ha-card\s*\{[^}]*overflow:\s*hidden/, "ha-card schneidet überstehenden Inhalt ab");
+// Gilt nur, solange keine Container-Query ins RIG_CSS wandert: beide teilen sich den <style>.
 assert.equal(chipCss.match(/@container/g).length, 3, "drei Abrüst-Stufen für enge Container");
 assert.ok(!card.classList.contains("pixel-no-chip"), "Host sichtbar, solange show_status gilt");
+
+// --- Theme: ein Signal, zwei Rigs (Overlay-Tier am body und Chip-Tier im Shadow Root)
+const petEl = overlay.querySelector(".pixel-pet");
+const chipEl = card.shadowRoot.querySelector(".chip-pet");
+// Das Mock-hass hat kein themes-Objekt, also greift der matchMedia-Stub (matches: false) -> hell.
+assert.ok(petEl.classList.contains("theme-light"), "ohne HA-Theme faellt die Card auf hell zurueck");
+assert.ok(chipEl.classList.contains("theme-light"), "das Chip-Rig bekommt dasselbe Signal");
+
+// Theme-Wechsel, ohne dass sich ein einziges Sensor-Attribut aendert.
+card.hass = { ...hass, themes: { darkMode: true } };
+await tick(10);
+assert.ok(!petEl.classList.contains("theme-light"), "hass.themes.darkMode schaltet auf dunkel");
+assert.ok(!chipEl.classList.contains("theme-light"), "der Chip zieht mit");
+card.hass = { ...hass, themes: { darkMode: false } };
+await tick(10);
+assert.ok(petEl.classList.contains("theme-light"), "und wieder zurueck auf hell");
+
+// --- Ei: keine harten Farben mehr, dafuer Tokens und eine Kontur
+const eggMarkup = overlay.querySelector(".egg").innerHTML;
+assert.ok(!/#f5f0e1|#a8d8a8|#c9b99a/i.test(eggMarkup), "keine hartkodierten Eifarben mehr im Markup");
+assert.match(eggMarkup, /var\(--pixel-egg\)/, "die Schale nutzt ein Token");
+assert.ok(overlay.querySelector(".egg .egg-outline"), "Kontur-Pfad vorhanden");
+
+// Die Hellvariante muss NACH den Stufenregeln stehen, sonst gewinnt bei gleicher
+// Spezifitaet (0,2,0) die Stufenregel und der Senior bleibt auf Hell unsichtbar.
+const rigCss = card.shadowRoot.querySelector("style").textContent;
+assert.ok(
+  rigCss.indexOf(".pixel-pet.theme-light {") > rigCss.indexOf(".pixel-pet.stage-senior"),
+  "Hellvariante steht nach den Stufenregeln",
+);
+
+// --- Menue und Statistik folgen dem HA-Theme statt fester Dunkelwerte
+const overlayCss = overlay.querySelector("style").textContent;
+for (const v of ["--card-background-color", "--primary-text-color", "--divider-color", "--secondary-text-color"]) {
+  assert.ok(overlayCss.includes(v), `Panel nutzt ${v}`);
+}
+assert.ok(!/rgba\(20,\s*20,\s*20/.test(overlayCss), "keine hartkodierten dunklen Panels mehr");
+assert.match(overlayCss, /\.pixel-overlay\.theme-light\s*\{/, "themenrichtige Fallbacktoken vorhanden");
 
 const hidden = document.createElement("pixel-card");
 hidden.setConfig({ entity: "sensor.pixel_status", show_status: false });
@@ -125,8 +164,40 @@ await tick(10);
 assert.ok(overlay.querySelector(".hat-sleep_cap.on"), "Schlafmütze");
 assert.ok(overlay.querySelector(".eyes-closed.on"), "Augen zu");
 
-// Unmount räumt auf
+// Feste Leiste am unteren Rand: die Bodenlinie muss darueber liegen.
+// jsdom kennt weder elementFromPoint noch Layout, beides wird darum nur hier gestubbt.
+const bar = document.createElement("navbar-card");
+bar.id = "bar";
+rects.bar = [0, 740, 390, 60];
+document.body.appendChild(bar);
+const realComputedStyle = window.getComputedStyle;
+window.getComputedStyle = (el) => (el === bar ? { position: "fixed" } : realComputedStyle(el));
+document.elementFromPoint = () => bar;
+card._brain.f.scan();
+assert.equal(card._brain.f.floorY, 740 - 12, "Bodenlinie liegt oberhalb der festen Leiste");
+delete document.elementFromPoint;
+card._brain.f.scan();
+assert.equal(card._brain.f.floorY, 800 - 12, "ohne Treffertest bleibt es beim Fensterrand");
+window.getComputedStyle = realComputedStyle;
+bar.remove();
+
+// View-Wechsel: solange die alte Karte noch haengt, haelt sie das Tier; danach uebernimmt die neue.
+// Ohne die Uebergabe im _unmount blieb das Tier hier bis zum Neuladen der Seite weg.
+const second = document.createElement("pixel-card");
+document.querySelector("hui-masonry-view").appendChild(second);
+second.setConfig({ entity: "sensor.pixel_status" });
+second.hass = hass;
+await tick(20);
+assert.equal(window.__pixelOverlayOwner, card, "die erste Karte behaelt das Tier");
+assert.ok(!second._overlay, "die zweite haelt sich zurueck");
+
 card.remove();
+await tick(20);
+assert.equal(window.__pixelOverlayOwner, second, "Uebergabe beim Abbau der alten Karte");
+assert.ok(document.querySelector(".pixel-overlay .pixel-pet svg"), "Tier ist nach dem Wechsel wieder da");
+
+// Unmount räumt auf
+second.remove();
 await tick(10);
 assert.equal(document.querySelector(".pixel-overlay"), null, "Overlay entfernt");
 assert.equal(window.__pixelOverlayOwner, null, "Owner freigegeben");

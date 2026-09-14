@@ -22,8 +22,11 @@ const DEFAULT_CONFIG = {
   entity: null,
   scale: 1,
   show_status: true,
-  avoid: ["picture", "map", "iframe", "camera", "webpage", "gauge"],
-  favorites: ["calendar"],
+  // Teilstrings des Kartentyps (Elementname ohne "hui-"-Praefix und "-card"-Suffix).
+  // "navbar" haelt Navigationsleisten aus der Moebelsuche heraus.
+  avoid: ["picture", "map", "iframe", "camera", "webpage", "gauge", "navbar"],
+  // "planner" und "agenda" treffen auch verbreitete Kalender-Custom-Cards.
+  favorites: ["calendar", "planner", "agenda"],
   idle_min_seconds: 3,
   idle_max_seconds: 8,
   floor_margin: 12,
@@ -126,6 +129,16 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
+/**
+ * Ermittelt, ob das Dashboard gerade hell oder dunkel dargestellt wird.
+ * `hass.themes.darkMode` folgt der Profileinstellung des Nutzers (inklusive "automatisch")
+ * und ist damit zuverlaessiger als prefers-color-scheme, das nur das Betriebssystem kennt.
+ */
+function resolveTheme(hass) {
+  if (typeof hass?.themes?.darkMode === "boolean") return hass.themes.darkMode ? "dark" : "light";
+  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
+}
+
 /** Alle Elemente eines Selektors – auch durch Shadow Roots hindurch. */
 function deepQueryAll(root, selector, out = [], depth = 0) {
   if (!root || depth > 25) return out;
@@ -137,6 +150,20 @@ function deepQueryAll(root, selector, out = [], depth = 0) {
     }
   }
   return out;
+}
+
+/**
+ * elementFromPoint, aber durch Shadow Roots hindurch bis zum innersten Treffer.
+ * Gibt null zurueck, wenn die Engine den Treffertest nicht kennt (jsdom).
+ */
+function deepElementFromPoint(x, y) {
+  let el = document.elementFromPoint?.(x, y) || null;
+  for (let i = 0; i < 20 && el?.shadowRoot; i++) {
+    const inner = el.shadowRoot.elementFromPoint?.(x, y);
+    if (!inner || inner === el) break;
+    el = inner;
+  }
+  return el;
 }
 
 /** Das Lovelace-Element (hui-*-card oder Custom Card), zu dem eine ha-card gehört. */
@@ -163,6 +190,9 @@ function findViewElement(start) {
 
 /* ------------------------------------------------------------------ Rig */
 
+// Silhouette des Eis. Wird zweimal gebraucht (Kontur und Flaeche), darum genau einmal definiert.
+const EGG_PATH = "M6 3h4v1h1v1h1v2h1v5h-1v1h-1v1H5v-1H4v-1H3V7h1V5h1V4h1z";
+
 const RIG_SVG = `
 <svg viewBox="-4 -4 24 22" xmlns="http://www.w3.org/2000/svg">
   <g class="rig">
@@ -176,7 +206,15 @@ const RIG_SVG = `
       <rect class="arm" x="2" y="8" width="1" height="3" fill="var(--pixel-dark)"/><rect class="arm arm-r" x="13" y="8" width="1" height="3" fill="var(--pixel-dark)"/>
       <rect x="4" y="9" width="1" height="1" fill="var(--pixel-blush)" opacity=".7"/><rect x="11" y="9" width="1" height="1" fill="var(--pixel-blush)" opacity=".7"/>
     </g>
-    <g class="egg layer"><path d="M6 3h4v1h1v1h1v2h1v5h-1v1h-1v1H5v-1H4v-1H3V7h1V5h1V4h1z" fill="#f5f0e1"/><path d="M5 8h1v1H5z M9 6h1v1H9z M7 10h1v1H7z" fill="#a8d8a8"/><path class="crack" d="M7 3h1v2h1v1H8v1H7V6H6V5h1z" fill="#c9b99a" opacity="0"/></g>
+    <g class="egg layer">
+      <!-- Kontur: derselbe Pfad, 2 Einheiten breit gestrichen. Die innere Haelfte verdeckt die
+           Flaeche darueber, es bleibt also eine pixelgenaue Kontur von einer Einheit.
+           Im dunklen Theme ist stroke-width 0, dann wird nichts gezeichnet. -->
+      <path class="egg-outline" d="${EGG_PATH}" fill="none" stroke="var(--pixel-outline)" stroke-linejoin="miter"/>
+      <path d="${EGG_PATH}" fill="var(--pixel-egg)"/>
+      <path d="M5 8h1v1H5z M9 6h1v1H9z M7 10h1v1H7z" fill="var(--pixel-egg-spot)"/>
+      <path class="crack" d="M7 3h1v2h1v1H8v1H7V6H6V5h1z" fill="var(--pixel-egg-line)" opacity="0"/>
+    </g>
     <g class="eyes"><rect x="5" y="7" width="2" height="2" fill="#fff"/><rect x="9" y="7" width="2" height="2" fill="#fff"/>
       <rect class="pupil" x="6" y="8" width="1" height="1" fill="#111"/><rect class="pupil" x="10" y="8" width="1" height="1" fill="#111"/></g>
     <g class="layer eyes-closed"><rect x="5" y="8" width="2" height="1" fill="#111"/><rect x="9" y="8" width="2" height="1" fill="#111"/></g>
@@ -201,13 +239,27 @@ const RIG_SVG = `
 </svg>`;
 
 const RIG_CSS = `
-  :host, .pixel-pet { --pixel-body:#ffcf4d; --pixel-dark:#c98a1c; --pixel-blush:#ff8a80; }
+  /* Farbtoken des Tiers. Hell und Dunkel unterscheiden sich ausschliesslich hier. */
+  :host, .pixel-pet {
+    --pixel-body:#ffcf4d; --pixel-dark:#c98a1c; --pixel-blush:#ff8a80;
+    --pixel-egg:#f5f0e1; --pixel-egg-spot:#a8d8a8; --pixel-egg-line:#c9b99a;
+    --pixel-outline:#2b2b2b; --pixel-outline-width:0;
+  }
+  .pixel-pet .egg-outline { stroke-width:var(--pixel-outline-width); }
   .pixel-pet svg { width:100%; height:100%; shape-rendering:crispEdges; overflow:visible; display:block; }
   .pixel-pet .rig { transform-origin:50% 50%; transform-box:fill-box; }
   .pixel-pet.flip .rig { transform:scaleX(-1); }
   .pixel-pet .layer { display:none; } .pixel-pet .layer.on { display:inline; }
   .pixel-pet.stage-senior { --pixel-body:#d9d3c2; --pixel-dark:#8f8a7c; }
   .pixel-pet.stage-baby { --pixel-body:#ffe08a; }
+  /* Helles Theme. Muss NACH den Stufenregeln stehen: gleiche Spezifitaet (0,2,0), es gewinnt
+     die spaetere Regel. Stufenspezifische Hellwerte brauchen darum (0,3,0).
+     Nur Ei und Senior bekommen eigene Werte; das gesaettigte Gelb des Koerpers traegt sich
+     auf Weiss ueber die dunklen Arme, Beine, Augen und den Mund. */
+  .pixel-pet.theme-light { --pixel-egg:#e9dcb8; --pixel-egg-spot:#4e8f52; --pixel-egg-line:#8a7852; --pixel-outline-width:2; }
+  .pixel-pet.theme-light.stage-senior { --pixel-body:#bdb6a3; --pixel-dark:#67635a; }
+  /* Belebt das bisher tote .crack-Markup: der Riss blitzt auf, wenn das Ei wackelt. */
+  .pixel-pet.wobble .crack { opacity:1; }
   .pixel-pet.tumble .rig { animation:pixel-tumble .9s linear; }
   .pixel-pet.eat .m-open { animation:pixel-chew .25s steps(1) infinite alternate; transform-origin:center; transform-box:fill-box; }
   .pixel-pet.wobble .rig { animation:pixel-wobble .8s ease-in-out; }
@@ -228,6 +280,17 @@ class Rig {
     this.el.innerHTML = RIG_SVG;
     this._q = (s) => this.el.querySelectorAll(s);
     this._facingLeft = false;
+    this._theme = null;
+  }
+
+  /**
+   * Hell oder Dunkel wird ausschliesslich als Klasse am Wurzelelement transportiert;
+   * alle Farbwerte stehen im RIG_CSS. Idempotent, darf also bei jedem hass-Update kommen.
+   */
+  setTheme(mode) {
+    if (this._theme === mode) return;
+    this._theme = mode;
+    this.el.classList.toggle("theme-light", mode === "light");
   }
 
   _toggle(selector, on) {
@@ -242,6 +305,7 @@ class Rig {
     const fainted = !!snap.fainted;
     const outfit = snap.outfit || {};
 
+    // Entfernt nur die Stufenklasse; "theme-light", "flip" und "fainted" bleiben bewusst stehen.
     this.el.className = this.el.className.replace(/\bstage-\w+/g, "").trim();
     this.el.classList.add("pixel-pet", `stage-${snap.stage || "adult"}`);
     this.el.classList.toggle("fainted", fainted);
@@ -344,8 +408,35 @@ class Furniture {
         noclimb: tags.includes("noclimb"),
       });
     }
-    this.floorY = this.bounds.bottom - this.config.floor_margin;
+    const barTop = this._bottomBarTop();
+    // floor_margin bleibt der manuelle Hebel; eine erkannte Leiste hebt den Boden zusaetzlich an.
+    this.floorY = (barTop ?? this.bounds.bottom) - this.config.floor_margin;
     return this.cards;
+  }
+
+  /**
+   * Sucht eine fest am unteren Rand klebende Leiste (Navigationsleisten-Cards, eigene Footer)
+   * und gibt deren Oberkante zurueck. Bewusst rein geometrisch, damit keine fremde Card
+   * namentlich verdrahtet werden muss. Ohne Treffer null.
+   */
+  _bottomBarTop() {
+    if (!document.elementFromPoint) return null;
+    const y = Math.round(this.bounds.bottom - 2);
+    const width = this.bounds.right - this.bounds.left;
+    for (const ratio of [0.15, 0.5, 0.85]) {
+      let el = deepElementFromPoint(Math.round(this.bounds.left + width * ratio), y);
+      for (let i = 0; i < 20 && el && el !== document.body; i++) {
+        if (el.classList?.contains("pixel-overlay")) break; // das eigene Tier zaehlt nicht
+        const position = getComputedStyle(el).position;
+        if (position === "fixed" || position === "sticky") {
+          const r = el.getBoundingClientRect();
+          const plausible = r.height > 8 && r.height < window.innerHeight * 0.3 && r.bottom >= this.bounds.bottom - 4;
+          if (plausible) return r.top;
+        }
+        el = el.parentElement || el.getRootNode()?.host || null;
+      }
+    }
+    return null;
   }
 
   climbable() {
@@ -368,7 +459,13 @@ class Furniture {
 
 const OVERLAY_CSS = `
   .pixel-overlay { position:fixed; inset:0; z-index:6; pointer-events:none; overflow:hidden; font-family:Roboto,system-ui,sans-serif; }
+  /* Eigene Fallbacks fuer den Fall, dass keine HA-Theme-Variablen erben (fremdes Frontend,
+     Demo-Seite). Sie folgen der erkannten Helligkeit, damit das Panel nie unlesbar wird. */
+  .pixel-overlay { --pixel-panel-bg:#1e1e1e; --pixel-panel-fg:#ededed; --pixel-panel-muted:#aaa; --pixel-panel-line:#444; --pixel-panel-btn:#2a2a2a; }
+  .pixel-overlay.theme-light { --pixel-panel-bg:#fff; --pixel-panel-fg:#212121; --pixel-panel-muted:#707070; --pixel-panel-line:#dadada; --pixel-panel-btn:#f1f1f1; }
   .pixel-overlay .pixel-pet { position:absolute; left:0; top:0; pointer-events:auto; cursor:pointer; touch-action:manipulation; will-change:transform; }
+  /* Die Sprechblase bleibt bewusst weiss mit hartem Nullblur-Schatten: gestalterisches
+     Pixel-Art-Element und in beiden Themes gut lesbar. Nicht "korrigieren". */
   .pixel-bubble { position:absolute; font-family:'Press Start 2P',ui-monospace,monospace; font-size:9px; line-height:1.5; background:#fff; color:#111; padding:8px 9px; border-radius:2px; box-shadow:3px 3px 0 #000; max-width:170px; white-space:pre-line; opacity:0; transition:opacity .15s; }
   .pixel-bubble.on { opacity:1; }
   .pixel-bubble::after { content:""; position:absolute; left:12px; bottom:-6px; border:6px solid transparent; border-top-color:#fff; border-bottom:0; }
@@ -376,18 +473,18 @@ const OVERLAY_CSS = `
   .pixel-fx.heart { color:#ff8a80; font-size:12px; } .pixel-fx.zzz { color:#8ab4f8; font-size:10px; }
   @keyframes pixel-rise { to { transform:translateY(-40px); opacity:0; } }
   .pixel-poop { position:absolute; font-size:22px; pointer-events:auto; cursor:pointer; filter:drop-shadow(0 2px 0 #000); }
-  .pixel-menu { position:absolute; display:flex; gap:4px; background:rgba(20,20,20,.94); border:1px solid #444; border-radius:10px; padding:6px; pointer-events:auto; box-shadow:0 6px 20px rgba(0,0,0,.5); }
-  .pixel-menu button { font-size:20px; line-height:1; background:#2a2a2a; border:1px solid #3a3a3a; border-radius:8px; width:40px; height:40px; cursor:pointer; color:#fff; }
-  .pixel-menu button:active { background:#444; }
-  .pixel-menu button:focus-visible { outline:2px solid #03a9f4; }
-  .pixel-stats { position:absolute; background:rgba(20,20,20,.96); color:#eee; border:1px solid #444; border-radius:10px; padding:10px 12px; font-size:12px; min-width:190px; pointer-events:auto; box-shadow:0 6px 20px rgba(0,0,0,.5); }
+  .pixel-menu { position:absolute; display:flex; gap:4px; background:var(--card-background-color, var(--pixel-panel-bg)); border:1px solid var(--divider-color, var(--pixel-panel-line)); border-radius:10px; padding:6px; pointer-events:auto; box-shadow:0 6px 20px rgba(0,0,0,.3); }
+  .pixel-menu button { font-size:20px; line-height:1; background:var(--secondary-background-color, var(--pixel-panel-btn)); border:1px solid var(--divider-color, var(--pixel-panel-line)); border-radius:8px; width:40px; height:40px; cursor:pointer; color:var(--primary-text-color, var(--pixel-panel-fg)); }
+  .pixel-menu button:active { filter:brightness(1.3); }
+  .pixel-menu button:focus-visible { outline:2px solid var(--primary-color, #03a9f4); }
+  .pixel-stats { position:absolute; background:var(--card-background-color, var(--pixel-panel-bg)); color:var(--primary-text-color, var(--pixel-panel-fg)); border:1px solid var(--divider-color, var(--pixel-panel-line)); border-radius:10px; padding:10px 12px; font-size:12px; min-width:190px; pointer-events:auto; box-shadow:0 6px 20px rgba(0,0,0,.3); }
   .pixel-stats h4 { margin:0 0 6px; font-size:13px; font-weight:500; }
   .pixel-stats .row { display:flex; align-items:center; gap:8px; margin:4px 0; }
-  .pixel-stats .row span:first-child { width:80px; color:#aaa; }
-  .pixel-stats .bar { flex:1; height:6px; background:#333; border-radius:3px; overflow:hidden; }
-  .pixel-stats .bar b { display:block; height:100%; background:#66bb6a; }
-  .pixel-stats .bar b.low { background:#ffb300; }
-  .pixel-stats .meta { margin-top:6px; color:#aaa; font-size:11px; }
+  .pixel-stats .row span:first-child { width:80px; color:var(--secondary-text-color, var(--pixel-panel-muted)); }
+  .pixel-stats .bar { flex:1; height:6px; background:var(--divider-color, var(--pixel-panel-line)); border-radius:3px; overflow:hidden; }
+  .pixel-stats .bar b { display:block; height:100%; background:var(--success-color, #66bb6a); }
+  .pixel-stats .bar b.low { background:var(--warning-color, #ffb300); }
+  .pixel-stats .meta { margin-top:6px; color:var(--secondary-text-color, var(--pixel-panel-muted)); font-size:11px; }
   @media (prefers-reduced-motion: reduce) { .pixel-fx { animation:none; opacity:.7; } }
 `;
 
@@ -417,6 +514,12 @@ class Overlay {
     this.size = PET_BASE_SIZE * (config.scale || 1);
     this._bubbleTimer = null;
     document.body.appendChild(this.el);
+  }
+
+  /** Reicht Hell/Dunkel an das Tier durch; die Klasse am Overlay steuert die Panel-Fallbacks. */
+  setTheme(mode) {
+    this.el.classList.toggle("theme-light", mode === "light");
+    this.rig.setTheme(mode);
   }
 
   destroy() {
@@ -695,12 +798,28 @@ class Brain {
 
   /* ---------------- Idle-Schleife */
 
+  /**
+   * Prueft, ob an der Stelle des Tiers noch das Tier selbst obenauf liegt. Verdeckt es etwas
+   * anderes (Vollbild-Bildschirmschoner, Dialog-Overlay), pausiert die Schleife. Rein
+   * geometrisch, also ohne Kopplung an eine bestimmte fremde Karte.
+   * `update()` laeuft weiter, damit das Tier nach dem Aufwachen sofort richtig aussieht.
+   */
+  _covered() {
+    if (!document.elementFromPoint) return false;
+    const x = Math.round(this.o.pos.x + this.o.size / 2);
+    const y = Math.round(this.o.pos.y - this.o.size / 2);
+    if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return false;
+    const hit = deepElementFromPoint(x, y);
+    return !!hit && !this.o.el.contains(hit);
+  }
+
   async _loop(token) {
     while (this.running && token === this._loopToken) {
       await wait(rnd(this.config.idle_min_seconds, this.config.idle_max_seconds) * 1000);
       if (!this.running || token !== this._loopToken) return;
       if (this.busy || !this.snap || document.visibilityState === "hidden") continue;
       if (this.snap.animations_enabled === false) continue;
+      if (this._covered()) continue; // Bildschirmschoner oder Dialog davor: nichts zu sehen, nichts zu tun
 
       const s = this.snap;
       if (s.fainted) continue;
@@ -893,11 +1012,18 @@ class Brain {
     });
   }
 
+  /**
+   * Kurzes Wackeln der Karte, auf der das Tier landet. Bewusst ueber die Web Animations API:
+   * schreibt keine Inline-Styles auf fremde Karten, kollidiert damit nicht mit ha-sortable im
+   * Bearbeitungsmodus und laesst keine transition-Eigenschaft zurueck.
+   */
   _shake(el) {
-    if (!el || reducedMotion()) return;
-    el.style.transition = "transform .1s";
-    const seq = ["-4px", "4px", "-2px", "0"];
-    seq.forEach((v, i) => setTimeout(() => (el.style.transform = v === "0" ? "" : `translateX(${v})`), i * 100));
+    if (!el || reducedMotion() || !el.animate) return;
+    const steps = ["0", "-4px", "4px", "-2px", "0"];
+    el.animate(
+      steps.map((v) => ({ transform: `translateX(${v})` })),
+      { duration: 400, easing: "ease-out" },
+    );
   }
 
   /* ---------------- Interaktion */
@@ -980,7 +1106,6 @@ class PixelCard extends HTMLElement {
   }
 
   set hass(hass) {
-    const first = !this._hass;
     this._hass = hass;
     if (!this._config.entity) {
       const guess = PixelCard._guessEntity(hass);
@@ -993,14 +1118,21 @@ class PixelCard extends HTMLElement {
       this._brain?.update(attrs);
       this._renderChip(attrs);
     }
-    if (first && this.isConnected) this._mount();
+    // Nicht nur beim ersten hass: beim View-Wechsel haelt kurzzeitig noch die alte Card das
+    // Tier, die neue muss es spaeter nachholen duerfen. _mount() bricht sonst sofort ab.
+    if (this.isConnected) this._mount();
+    // Ausserhalb des Attribut-Vergleichs: ein Theme-Wechsel aendert keine Sensor-Attribute.
+    this._applyTheme();
   }
 
   connectedCallback() {
+    // Registry aller lebenden Karten: beim Abbau wird das Tier daraus sofort weitergereicht.
+    (window.__pixelCards = window.__pixelCards || new Set()).add(this);
     if (this._hass) this._mount();
   }
 
   disconnectedCallback() {
+    window.__pixelCards?.delete(this);
     this._unmount();
   }
 
@@ -1008,13 +1140,14 @@ class PixelCard extends HTMLElement {
 
   _mount() {
     if (this._overlay) return;
-    if (window.__pixelOverlayOwner && window.__pixelOverlayOwner !== this && window.__pixelOverlayOwner.isConnected) {
-      this._renderChip(this._lastAttrs);
-      return; // Ein anderes Card-Element hält bereits das Tier auf dieser Seite
-    }
+    // Ein anderes Card-Element haelt bereits das Tier auf dieser Seite. Die Pruefung auf
+    // _overlay verhindert, dass ein Besitzer ohne Tier alle anderen blockiert.
+    const owner = window.__pixelOverlayOwner;
+    if (owner && owner !== this && owner.isConnected && owner._overlay) return;
     window.__pixelOverlayOwner = this;
     const lang = (this._hass?.locale?.language || this._hass?.language || "de").slice(0, 2);
     this._overlay = new Overlay(this._config);
+    this._applyTheme(); // sonst startet das Tier eine hass-Runde lang im falschen Farbsatz
     const furniture = new Furniture(findViewElement(this), this, this._config);
     const mover = new Mover(this._overlay);
     this._brain = new Brain({
@@ -1054,7 +1187,17 @@ class PixelCard extends HTMLElement {
     this._overlay.destroy();
     this._overlay = null;
     this._brain = null;
-    if (window.__pixelOverlayOwner === this) window.__pixelOverlayOwner = null;
+    if (window.__pixelOverlayOwner === this) {
+      window.__pixelOverlayOwner = null;
+      // Nachfolger sofort uebernehmen lassen. Ohne das bliebe das Tier beim View-Wechsel weg,
+      // bis zufaellig das naechste hass-Update eintrifft.
+      for (const other of window.__pixelCards || []) {
+        if (other !== this && other.isConnected && other._hass) {
+          other._mount();
+          break;
+        }
+      }
+    }
     window.removeEventListener("resize", this._onResize);
     window.removeEventListener("scroll", this._onScroll, true);
     window.removeEventListener("pointermove", this._onPointer);
@@ -1153,6 +1296,7 @@ class PixelCard extends HTMLElement {
     this.classList.toggle("pixel-no-chip", !this._config.show_status);
     if (!this._config.show_status) {
       this.shadowRoot.innerHTML = `<style>${CARD_CSS}</style><ha-card class="chip-hidden"></ha-card>`;
+      this._chipRig = null;
       return;
     }
     if (!this.shadowRoot.querySelector("ha-card:not(.chip-hidden)")) {
@@ -1163,6 +1307,7 @@ class PixelCard extends HTMLElement {
           <div class="chip-bars"><div class="chip-bar"><b data-k="hunger"></b></div><div class="chip-bar"><b data-k="happiness"></b></div><div class="chip-bar"><b data-k="energy"></b></div></div>
         </ha-card>`;
       this._chipRig = new Rig(this.shadowRoot.querySelector(".chip-pet"));
+      this._applyTheme(); // der Shadow Root wird neu gebaut, das frische Rig kennt das Theme noch nicht
     }
     if (!attrs) return;
     this._chipRig.apply(attrs);
@@ -1176,6 +1321,13 @@ class PixelCard extends HTMLElement {
       b.classList.toggle("low", v < 30);
     });
     void lang;
+  }
+
+  /** Einziger Ort, an dem das Theme-Signal zusammenlaeuft: Overlay-Tier und Chip-Tier. */
+  _applyTheme() {
+    const mode = resolveTheme(this._hass);
+    this._overlay?.setTheme(mode);
+    this._chipRig?.setTheme(mode);
   }
 
   _debounce(fn, ms) {

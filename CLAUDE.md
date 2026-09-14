@@ -82,6 +82,7 @@ Modulrollen:
 ## Fallen
 
 - **Card-Cache:** Die Card wird als `?v={VERSION}` ausgeliefert (`frontend.py`). Nach jeder Änderung an `pixel-card.js` muss `VERSION` in `const.py` erhöht werden, sonst sieht kein Browser die Änderung. Die Version steht an drei Stellen (`const.py`, `manifest.json`, `pyproject.toml`); die cache-relevante ist `const.VERSION`.
+- **Keine persönlichen Daten ins Repo.** Das Repo ist öffentlich. Beispiele in README, PROJEKTSTAND, `docs/*.html` und Tests bleiben generisch: keine echten Entity-IDs, Namen, Orte, Kalendertitel oder MAC-Adressen. Geteiltes Dashboard-YAML des Nutzers ist Arbeitsmaterial und wird nie übernommen, auch nicht gekürzt. Vor dem Commit prüfen: `grep -rniE "<eigener ort>|<eigene namen>" . --exclude-dir=node_modules --exclude-dir=.git` muss leer sein.
 - **`"requirements": []` im Manifest ist Absicht** — die Integration ist reines stdlib. Keine Laufzeitabhängigkeit hinzufügen.
 - **Services sind domänenweit, nicht entity-getargetet.** Ohne `config_entry_id` trifft ein Aufruf stillschweigend `entries[0]`.
 - **Optionen werden heiß übernommen:** `apply_settings` baut eine neue `PetEngine` um den bestehenden `PetState` (`coordinator.py`). Das Tier überlebt, aber tick-übergreifende In-Memory-Flags einzelner Regeln (`HungerEventRule._was_hungry`, `FeedingReminderRule._reminded_window`) werden dabei zurückgesetzt.

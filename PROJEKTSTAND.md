@@ -1,7 +1,7 @@
 # PROJEKTSTAND – Pixel, Dashboard-Tamagotchi für Home Assistant
 
 > Briefing für die nächste Session. Zuerst lesen, dann `README.md` für Nutzersicht, `docs/KONZEPT.md` für die Idee.
-> Stand: 11.09.2026 · Version 0.1.0 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
+> Stand: 14.09.2026 · Version 0.1.2 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
 
 ## 1. Was ist das
 
@@ -54,9 +54,11 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 5. **Entity-IDs folgen englischen Namen** (HA-Verhalten). Englische Namen wurden deshalb an die Schlüssel angeglichen (`sensor.pixel_hunger`, `button.pixel_medicine`). Semantik: Hunger-Sensor 100 = satt.
 6. **Kein Tod per Default** (Ohnmacht + Medizin + Futter). Hardcore als Option → `_rebirth`.
 7. **Max. 12 h Nachrechnung** nach Ausfall (`MAX_TICK_HOURS`).
-8. **Ein Tier pro Seite** (`window.__pixelOverlayOwner`), Position wird nicht zwischen Clients gesynct (bewusst verschoben, siehe Backlog).
+8. **Ein Tier pro Seite** (`window.__pixelOverlayOwner`), Position wird nicht zwischen Clients gesynct (bewusst verschoben, siehe Backlog). Seit 0.1.2 gibt es zusätzlich `window.__pixelCards`: beim Abbau reicht die aussteigende Card das Tier sofort an eine andere lebende Card weiter, und `set hass` versucht `_mount()` bei jedem Update erneut. Ohne beides verlor die neue View den Wettlauf gegen die alte und das Tier blieb bis zum Neuladen weg.
 9. **Texte der Card** liegen in `Texts` (de/en) in der JS-Datei; Sprache aus `hass.locale.language`.
 10. **Wer füttert** kommt aus `call.context.user_id` → `feeds_by_user` (Familienstatistik).
+11. **Theme ausschließlich als Klasse am Rig** (`theme-light`), alle Farbwerte als Custom Properties im `RIG_CSS`/`OVERLAY_CSS`. `resolveTheme(hass)` ist der einzige Erzeuger des Signals (`hass.themes.darkMode`, Fallback `prefers-color-scheme`), `PixelCard._applyTheme()` der einzige Verteiler an die **zwei** Rig-Instanzen (Overlay-Tier am body, Chip-Tier im Shadow Root). Kein `MutationObserver`, kein `matchMedia`-Listener: HA erzeugt beim Theme-Wechsel ein neues `hass`-Objekt. **Kein `theme:`-Konfigurationsschlüssel** – bewusst verworfen, um die Konfigurationsfläche klein zu halten. Preis: läuft ein dunkler Vollbild-Bildschirmschoner über einem hellen Theme, passt der Farbsatz nicht; praktisch entschärft, weil das Tier unter einer Verdeckung ohnehin pausiert.
+12. **Kontur als SVG-Stroke, ausdrücklich kein CSS-Filter.** Die Sichtbarkeit des Eis im hellen Theme kommt aus einem zweiten Pfad mit `stroke-width:2` auf derselben Silhouette (`EGG_PATH`, einmal definiert, zweimal eingesetzt); die innere Hälfte verdeckt der Füllpfad, es bleibt eine pixelgenaue Kontur von einer Einheit. Eine Kontur über vier gestapelte `drop-shadow()` wurde verworfen: vier Offscreen-Filterdurchläufe **pro Repaint** bei einem Tier, das im 8-fps-Takt und pro rAF-Frame neu zeichnet, bricht auf einem Pi-4-Kiosk die Framerate – und ein 1-px-Filterschatten liegt nicht auf dem Pixelraster des Rigs (2,67 px je SVG-Einheit), `shape-rendering:crispEdges` gilt für Filter nicht.
 
 ## 4. Konventionen
 
@@ -75,7 +77,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 | Engine | 34 Tests grün. Balancing plausibel, aber **nicht im Alltag erprobt** (Zahlen ggf. nach 1–2 Wochen nachjustieren). |
 | Integration | 10 Tests grün gegen **HA 2026.9.0 und 2026.8.3 (Python 3.14)** sowie 2025.1.4 (Python 3.12); keine Deprecation-Hinweise zu `custom_components.pixel`. Ruff sauber unter 3.14. **Nicht auf einer Live-Instanz gestartet.** |
 | Config-Flow | Programmatisch geprüft (Import, Schema). UI-Durchlauf nicht getestet. |
-| Card | jsdom-Smoke-Test grün, `node --check` sauber, Demo-Seite vorhanden. **Im echten HA-Frontend noch nie gelaufen.** Höchstes Restrisiko: Shadow-DOM-Scan in Sections-View, z-index gegenüber HA-Header/Dialogen, Touch-Verhalten auf dem Pi-Kiosk. |
+| Card | jsdom-Smoke-Test grün, `node --check` sauber, Demo-Seite vorhanden. **Im echten HA-Frontend noch nie gelaufen**, aber gegen ein reales Dashboard-YAML (Sections-View, fixe Navigations-Card, Wallpanel-Kiosk, durchweg Custom Cards) durchgesehen – die Befunde daraus sind in 0.1.2 eingearbeitet. **Die Farbwerte des hellen Themes sind rechnerisch gewählt und noch nicht im Browser beurteilt** → `docs/card-demo.html` öffnen, Umschalter „hell/dunkel“ × Stufe „egg“. Verbleibendes Restrisiko: Touch-Verhalten auf dem Pi-Kiosk, Erkennung ungewöhnlicher fixer Leisten, `position: fixed` des Overlays, falls Wallpanel `transform`/`filter` auf `body` setzt (das würde die Koordinaten verschieben). |
 | HACS | `hacs.json` vorhanden; Repository muss auf GitHub liegen und als Custom Repository (Integration) eingebunden werden. Nicht getestet. |
 
 ## 6. Erste Live-Inbetriebnahme – Checkliste für den Nutzer/nächste Session
@@ -92,6 +94,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 ## 7. Backlog (priorisiert)
 
 **P1 – nach erstem Live-Test wahrscheinlich nötig**
+- **Sichtprüfung des hellen Themes im Browser** (`docs/card-demo.html`): Kontur und Farbwerte von Ei und Senior beurteilen, ggf. nachjustieren. Braucht der Körper ebenfalls eine Kontur, ist die Technik dieselbe (`BODY_PATH` + `.body-outline`, analog zu `EGG_PATH`).
 - Card-Feinschliff aus Live-Feedback (Scan-Robustheit, z-index, Touch).
 - Balancing-Justage nach realer Nutzung (Tempo, Fütterungsfenster, Häufchen-Frequenz).
 - Visueller Editor für die Card (`getConfigElement`) – aktuell nur YAML/Karten-Picker mit Stub.
@@ -104,6 +107,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - Sound-Hooks (Sonos) als Automations-Blueprints statt im Code.
 - Pixel-Sprite-Sequenzen für Sonderaktionen (Purzelbaum, Schneemann) als Ergänzung zum SVG-Rig.
 - Stufen-Designs: Ei/Baby/Senior sind bisher nur Farbe/Form, Kind/Teen/Erwachsen identisch.
+- Schlüpf-Animation: `.crack` blitzt bisher nur beim Wackeln des Eis auf. Ein Feld „kurz vor dem Schlüpfen“ im Snapshot wäre eine Backend-Änderung und fehlt bewusst.
 
 **P3 – Qualität**
 - Diagnostics-Plattform (`diagnostics.py`) für Support.
@@ -118,4 +122,9 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - `calendar.get_events` liefert `uid` nicht bei allen Kalender-Integrationen; Fallback-UID = entity+title+start.
 - `zone.home` zählt nur `person.*` mit Tracker. Ohne Tracker → `persons_home` None → Einsamkeits-/Heimkehr-Logik inaktiv (gewollt).
 - Tests: `pytest-homeassistant-custom-component` muss zur HA-Version passen (0.13.363 ↔ 2026.9.0, 0.13.357 ↔ 2026.8.3, 0.13.205 ↔ 2025.1.4; siehe `requirements_test.txt`). HA 2026.x braucht **Python ≥ 3.14.2** – am einfachsten `uv python install 3.14` + `uv venv`. `home-assistant-frontend` (Version aus dem `frontend`-Manifest) wird für die Abhängigkeit im Test benötigt.
-- jsdom-Test stubbt `getBoundingClientRect`; Layout-Fragen (Überlappung, Clip-Optik) sind damit **nicht** abgedeckt → `docs/card-demo.html` im Browser öffnen.
+- jsdom-Test stubbt `getBoundingClientRect`; Layout-Fragen (Überlappung, Clip-Optik) und **Farbkontraste** sind damit **nicht** abgedeckt → `docs/card-demo.html` im Browser öffnen (hat seit 0.1.2 einen Hell/Dunkel-Umschalter und eine fixe Leiste am unteren Rand).
+- jsdom kennt weder `document.elementFromPoint` noch `Element.animate`. Beide Stellen (`_bottomBarTop`, `_covered`, `_shake`) haben darum einen Feature-Guard; wer ihn entfernt, bricht den Smoke-Test.
+- Zwei Rig-Instanzen: Overlay-Tier **und** Chip-Tier. Wer am Rig etwas ergänzt, das von außen gesetzt wird (wie `setTheme`), muss beide bedienen – Sammelpunkt ist `PixelCard._applyTheme()`.
+- `Rig.apply()` schreibt `className` neu und entfernt per Regex nur `stage-*`. Weitere Zustandsklassen (`theme-light`, `flip`, `fainted`) überleben das nur, solange das so bleibt.
+- **Keine persönlichen Daten ins öffentliche Repo.** Beispiele in README, PROJEKTSTAND, Demo-Seiten und Tests bleiben generisch (keine echten Entity-IDs, Namen, Orte, Kalendertitel, MAC-Adressen). Vor dem Commit prüfen:
+  `grep -rniE "<eigener ort>|<eigene namen>" . --exclude-dir=node_modules --exclude-dir=.git` muss leer sein.

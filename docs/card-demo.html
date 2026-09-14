@@ -6,19 +6,26 @@
 <title>Pixel-Card – Demo ohne Home Assistant</title>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root{--primary-text-color:#e6e6e6;--secondary-text-color:#9a9a9a;--divider-color:#333;--success-color:#66bb6a;--warning-color:#ffb300}
-  body{margin:0;background:#111;color:#e6e6e6;font-family:Roboto,system-ui,sans-serif}
-  header{position:sticky;top:0;background:#1c1c1c;padding:12px 16px;font-weight:500;z-index:4;border-bottom:1px solid #222}
+  /* Die Theme-Variablen liegen wie in echtem HA am <html>-Element und erben von dort in
+     das am body haengende Overlay. Die Klasse "light" schaltet den hellen Satz an. */
+  html{--primary-text-color:#e6e6e6;--secondary-text-color:#9a9a9a;--card-background-color:#1f1f1f;
+       --secondary-background-color:#2a2a2a;--divider-color:#333;--primary-color:#03a9f4;
+       --success-color:#66bb6a;--warning-color:#ffb300;--demo-bg:#111;--demo-header:#1c1c1c;--demo-line:#222}
+  html.light{--primary-text-color:#212121;--secondary-text-color:#727272;--card-background-color:#fff;
+       --secondary-background-color:#f1f1f1;--divider-color:#e0e0e0;--demo-bg:#f2f4f7;--demo-header:#fff;--demo-line:#dfe3e8}
+  body{margin:0;background:var(--demo-bg);color:var(--primary-text-color);font-family:Roboto,system-ui,sans-serif}
+  header{position:sticky;top:0;background:var(--demo-header);padding:12px 16px;font-weight:500;z-index:4;border-bottom:1px solid var(--demo-line)}
   hui-masonry-view{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px 12px 120px}
-  ha-card{display:block;background:#1f1f1f;border-radius:12px;padding:14px;min-height:96px;box-sizing:border-box}
+  ha-card{display:block;background:var(--card-background-color);border-radius:12px;padding:14px;min-height:96px;box-sizing:border-box}
   .wide{grid-column:1/-1}
-  .lbl{font-size:12px;color:#9a9a9a}.val{font-size:26px;font-weight:500;margin-top:4px}
+  .lbl{font-size:12px;color:var(--secondary-text-color)}.val{font-size:26px;font-weight:500;margin-top:4px}
   /* Imitiert hui-horizontal-stack-card: gleiche Anteile, Kinder duerfen unter ihre Mindestbreite schrumpfen. */
   .hstack{grid-column:1/-1;display:flex;gap:8px}
   .hstack>*{flex:1 1 0;min-width:0}
   .hstack ha-card{min-height:52px;padding:8px 10px;display:flex;align-items:center;font-size:13px}
-  .ctl{position:fixed;left:0;right:0;bottom:0;background:#0a0a0a;border-top:1px solid #222;padding:10px 12px;z-index:20;display:flex;gap:6px;flex-wrap:wrap}
-  .ctl button,.ctl select{font:inherit;font-size:13px;background:#1f1f1f;color:#e6e6e6;border:1px solid #333;border-radius:8px;padding:7px 10px}
+  /* Bewusst fix am unteren Rand: dient zugleich als Testfall fuer die Erkennung fester Leisten. */
+  .ctl{position:fixed;left:0;right:0;bottom:0;background:var(--demo-header);border-top:1px solid var(--demo-line);padding:10px 12px;z-index:20;display:flex;gap:6px;flex-wrap:wrap}
+  .ctl button,.ctl select{font:inherit;font-size:13px;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);border-radius:8px;padding:7px 10px}
 </style>
 </head>
 <body>
@@ -55,6 +62,7 @@
   <select id="stage"><option>egg</option><option selected>adult</option><option>baby</option><option>senior</option></select>
   <label><input type="checkbox" id="sleep"> sleeping</label>
   <label><input type="checkbox" id="anim" checked> animations</label>
+  <button id="theme">🌗 hell/dunkel</button>
 </div>
 
 <script src="../custom_components/pixel/frontend/pixel-card.js"></script>
@@ -67,7 +75,7 @@
       connectedCallback() {
         if (this.shadowRoot) return;
         this.attachShadow({ mode: "open" }).innerHTML =
-          "<style>:host{display:block;background:#1f1f1f;border-radius:12px;box-sizing:border-box}</style><slot></slot>";
+          "<style>:host{display:block;background:var(--card-background-color);border-radius:12px;box-sizing:border-box}</style><slot></slot>";
       }
     });
   }
@@ -84,6 +92,8 @@
   function makeHass() {
     return {
       locale: { language: "de" },
+      // wie im echten Frontend: die Card liest die Helligkeit aus hass.themes.darkMode
+      themes: { darkMode: !document.documentElement.classList.contains("light") },
       states: { "sensor.pixel_status": { state: status.mood, attributes: { ...status, outfit: { ...status.outfit } } } },
       formatEntityState: (s) => s.state,
       connection: { subscribeEvents: (cb, type) => { listeners.push(cb); return Promise.resolve(() => {}); } },
@@ -111,6 +121,8 @@
   document.querySelector('[data-ev="welcome_home"]').onclick = () => fire("welcome_home", { away_hours: 3 });
   document.querySelector('[data-ev="say"]').onclick = () => fire("say", { text: "Hallo Familie!", duration: 3 });
   document.querySelector('[data-ev="trick"]').onclick = () => fire("trick", { trick: "random" });
+  // Hell/Dunkel umschalten: push() schickt ein neues hass-Objekt, die Card zieht das Theme daraus.
+  document.getElementById("theme").onclick = () => { document.documentElement.classList.toggle("light"); push(); };
   document.getElementById("weather").onchange = (e) => { status.weather = e.target.value; status.outfit = { hat: "", accessory: "", item: "", ...OUTFITS[e.target.value] }; push(); };
   document.getElementById("stage").onchange = (e) => { status.stage = e.target.value; push(); };
   document.getElementById("sleep").onchange = (e) => { status.sleeping = e.target.checked; status.outfit = e.target.checked ? { hat: "sleep_cap", accessory: "", item: "" } : { hat: "", accessory: "", item: "", ...OUTFITS[status.weather] }; push(); };

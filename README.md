@@ -78,6 +78,10 @@ Die Card muss **einmal** in der View liegen, auf der Pixel leben soll. Sie zeigt
 
 **Empfehlung für Wandtablets/Kiosk:** Die Card in die Sections-View des Familien-Dashboards legen. Pixel bevorzugt Kalenderkarten zum Verstecken und meidet Bilder, Karten und Kameras.
 
+**Mehrere Views:** Pixel lebt einmal pro Seite. Soll es beim Wechsel zwischen mehreren Views mitwandern, gehört auf jede View eine `pixel-card` – auf den Nebenviews am besten mit `show_status: false`. Die neu erscheinende Karte übernimmt das Tier dabei automatisch von der verschwindenden.
+
+**Feste Navigations- oder Fußleisten:** Liegt am unteren Bildschirmrand eine fixierte Leiste (etwa eine Navigations-Card im Kiosk-Betrieb), erkennt Pixel sie und setzt seine Bodenlinie darüber, statt über den Schaltflächen zu laufen. Greift das bei einer ungewöhnlichen Leiste nicht, hilft ein größeres `floor_margin` (siehe [Abschnitt 10](#10-card-optionen)).
+
 Karten lassen sich gezielt beeinflussen (Attribut am Karten-Element, z. B. über `card-mod` oder eigene Custom Cards):
 
 - `data-pixel="favorite"` – Lieblingsversteck
@@ -213,18 +217,24 @@ type: custom:pixel-card
 entity: sensor.pixel_status   # optional, wird sonst automatisch gefunden
 show_status: true             # Status-Chip in der Karte anzeigen
 scale: 1                      # Größe des Tiers (0.75 – 1.5 sinnvoll)
-avoid:                        # Kartentypen, die gemieden werden (Teilstrings von hui-*-card)
+avoid:                        # Kartentypen, die gemieden werden (Teilstrings des Kartentyps)
   - picture
   - map
   - camera
+  - navbar
 favorites:                    # bevorzugte Verstecke
   - calendar
+  - planner
 idle_min_seconds: 3           # Pause zwischen Aktionen
 idle_max_seconds: 8
 floor_margin: 12              # Abstand der Bodenlinie zum unteren Rand
 ```
 
-Die Card respektiert `prefers-reduced-motion` (keine Purzelbäume) und pausiert, wenn der Tab nicht sichtbar ist.
+Die Card respektiert `prefers-reduced-motion` (keine Purzelbäume) und pausiert, wenn der Tab nicht sichtbar ist oder wenn etwas anderes das Tier verdeckt – etwa ein Bildschirmschoner im Kiosk-Betrieb oder ein geöffneter Dialog.
+
+**Helles und dunkles Theme:** Die Card liest die Helligkeit aus dem Theme von Home Assistant (Fallback: Systemeinstellung) und zieht bei jedem Wechsel automatisch nach. Im hellen Theme bekommt das Ei eine dunkle Pixel-Kontur und kräftigere Farben, der Senior einen dunkleren Ton; Aktionsmenü und Statistik übernehmen die Theme-Farben. Im dunklen Theme sieht alles unverändert aus.
+
+**Custom Cards:** `avoid` und `favorites` vergleichen Teilstrings des Kartentyps. Der Typ ist der Elementname ohne `hui-`-Präfix und `-card`-Suffix – aus `hui-calendar-card` wird `calendar`, aus einer Custom Card `<name>-card` wird `<name>`. Wer wissen will, wie die eigenen Karten heißen, findet die Elementnamen in der Browser-Konsole (F12) über die Elementansicht. Einzelne Karten lassen sich zusätzlich mit `data-pixel="favorite"` bzw. `data-pixel="noclimb"` auszeichnen (siehe [Abschnitt 5](#5-card-ins-dashboard-legen)).
 
 **Status-Chip in engen Containern:** In `horizontal-stack` oder `custom:stack-in-card` bekommt jede Karte per `flex: 1 1 0` nur einen gleichen Anteil der Zeile. Der Chip rüstet dann stufenweise ab – erst fallen die drei Balken weg, dann Name und Stimmung, zuletzt bleibt nur das Tier. Wer den vollen Chip sehen will, gibt der Card eine eigene Zeile oder in der Sections-View eigene `grid_options`. Geht es ohnehin nur um das Tier auf dem Dashboard, ist `show_status: false` die sauberste Lösung – dann verschwindet die Karte vollständig aus dem Layout.
 
@@ -249,7 +259,10 @@ Alle Zahlen stehen in `custom_components/pixel/engine/config.py`.
 | „Benutzerdefiniertes Element existiert nicht: pixel-card“ | Integration läuft? Browser hart neu laden (Strg + F5). In der Companion-App: Einstellungen → Companion-App → Frontend-Cache zurücksetzen. Prüfen, ob `http://<ha>:8123/pixel-static/pixel-card.js` erreichbar ist. |
 | Pixel erscheint nicht, Chip aber schon | Die Card muss in derselben View liegen. Browser-Konsole (F12) auf `[pixel-card]`-Meldungen prüfen. |
 | Pixel steht oben am Header | Karten werden erst nach dem Laden gescannt; die Card scannt nach 0,8 s nach. Bei sehr langsamen Tablets `idle_min_seconds` erhöhen. |
-| Mehrere Pixel gleichzeitig | Auf einer Seite läuft immer nur ein Tier – die erste Card gewinnt. Pro View nur eine `pixel-card` legen. |
+| Mehrere Pixel gleichzeitig | Auf einer Seite läuft immer nur ein Tier – die erste Card gewinnt. Weitere Cards zeigen nur ihren Status-Chip. |
+| Pixel ist im hellen Theme kaum zu sehen | Ab 0.1.2 passt sich die Card dem Theme an. Bleibt es blass: Browser hart neu laden, damit die neue Card-Version geladen wird. |
+| Pixel verschwindet nach einem Wechsel der View | Ab 0.1.2 behoben. Vorher half nur Neuladen. Prüfen, ob die geladene Card-Version aktuell ist (`/pixel-static/pixel-card.js?v=…`). |
+| Pixel läuft über der Navigationsleiste | Sollte automatisch erkannt werden; sonst `floor_margin` auf die Höhe der Leiste setzen. |
 | Kalender wird ignoriert | Die Integration nutzt `calendar.get_events`; die Kalender-Integration muss diese Aktion unterstützen (Google, CalDAV, lokale Kalender: ja). |
 | Entity-IDs lauten anders | Die IDs folgen dem englischen Entity-Namen; bei anderem Tiernamen ändert sich das Präfix (`sensor.blob_status`). |
 | Logging | `logger: logs: custom_components.pixel: debug` in `configuration.yaml`. |
