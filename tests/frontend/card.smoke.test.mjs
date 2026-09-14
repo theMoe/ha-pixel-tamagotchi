@@ -75,7 +75,8 @@ assert.match(chipCss, /:host\s*\{[^}]*display:\s*block/, ":host ist display:bloc
 assert.match(chipCss, /:host\s*\{[^}]*container-type:\s*inline-size/, ":host ist Query-Container");
 assert.match(chipCss, /ha-card\s*\{[^}]*overflow:\s*hidden/, "ha-card schneidet überstehenden Inhalt ab");
 // Gilt nur, solange keine Container-Query ins RIG_CSS wandert: beide teilen sich den <style>.
-assert.equal(chipCss.match(/@container/g).length, 3, "drei Abrüst-Stufen für enge Container");
+assert.equal(chipCss.match(/@container/g).length, 4, "vier Abrüst-Stufen für enge Container");
+assert.match(chipCss, /@container \(max-width: 44px\) \{ ha-card \{ display:none/, "überbuchte Zeile blendet die Karte ganz aus");
 assert.ok(!card.classList.contains("pixel-no-chip"), "Host sichtbar, solange show_status gilt");
 
 // --- Theme: ein Signal, zwei Rigs (Overlay-Tier am body und Chip-Tier im Shadow Root)

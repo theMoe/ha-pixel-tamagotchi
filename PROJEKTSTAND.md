@@ -1,7 +1,7 @@
 # PROJEKTSTAND – Pixel, Dashboard-Tamagotchi für Home Assistant
 
 > Briefing für die nächste Session. Zuerst lesen, dann `README.md` für Nutzersicht, `docs/KONZEPT.md` für die Idee.
-> Stand: 14.09.2026 · Version 0.1.2 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
+> Stand: 14.09.2026 · Version 0.1.3 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
 
 ## 1. Was ist das
 
@@ -122,6 +122,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - `calendar.get_events` liefert `uid` nicht bei allen Kalender-Integrationen; Fallback-UID = entity+title+start.
 - `zone.home` zählt nur `person.*` mit Tracker. Ohne Tracker → `persons_home` None → Einsamkeits-/Heimkehr-Logik inaktiv (gewollt).
 - Tests: `pytest-homeassistant-custom-component` muss zur HA-Version passen (0.13.363 ↔ 2026.9.0, 0.13.357 ↔ 2026.8.3, 0.13.205 ↔ 2025.1.4; siehe `requirements_test.txt`). HA 2026.x braucht **Python ≥ 3.14.2** – am einfachsten `uv python install 3.14` + `uv venv`. `home-assistant-frontend` (Version aus dem `frontend`-Manifest) wird für die Abhängigkeit im Test benötigt.
+- **Die Card fordert keine Mindestbreite ein.** `container-type: inline-size` an `:host` impliziert `contain: inline-size`; der Host trägt damit keine intrinsische Breite bei. In einer `horizontal-stack` mit Geschwistern, die feste Breiten setzen, schluckt die Pixel-Card deshalb das gesamte Defizit und kollabiert auf Breite 0 — live gemessen: `hui-card` als Elternelement mit Breite 0, während vier Geschwister mit zusammen 375 px die Zeile füllten. Seit 0.1.3 blendet eine vierte Container-Stufe unterhalb von 44 px die `ha-card` ganz aus, damit kein Stummel stehenbleibt. Wer den Chip sehen will, gibt der Card eine eigene Zeile; wer nur das Tier will, setzt `show_status: false`.
 - jsdom-Test stubbt `getBoundingClientRect`; Layout-Fragen (Überlappung, Clip-Optik) und **Farbkontraste** sind damit **nicht** abgedeckt → `docs/card-demo.html` im Browser öffnen (hat seit 0.1.2 einen Hell/Dunkel-Umschalter und eine fixe Leiste am unteren Rand).
 - jsdom kennt weder `document.elementFromPoint` noch `Element.animate`. Beide Stellen (`_bottomBarTop`, `_covered`, `_shake`) haben darum einen Feature-Guard; wer ihn entfernt, bricht den Smoke-Test.
 - Zwei Rig-Instanzen: Overlay-Tier **und** Chip-Tier. Wer am Rig etwas ergänzt, das von außen gesetzt wird (wie `setTheme`), muss beide bedienen – Sammelpunkt ist `PixelCard._applyTheme()`.

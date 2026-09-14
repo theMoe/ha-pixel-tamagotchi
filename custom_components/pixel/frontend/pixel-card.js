@@ -1061,6 +1061,9 @@ const CARD_CSS = `
   @container (max-width: 210px) { .chip-bars { display:none; } }
   @container (max-width: 110px) { .chip-text { display:none; } }
   @container (max-width: 70px) { ha-card { padding:6px; gap:0; } .chip-pet { width:28px; height:28px; } }
+  /* Ist die Zeile ueberbucht (Geschwister mit festen Breiten), schrumpft die Card auf null.
+     Dann bleibt sonst der Rand der ha-card als Stummel stehen. Lieber gar nichts zeigen. */
+  @container (max-width: 44px) { ha-card { display:none; } }
 `;
 
 class PixelCard extends HTMLElement {

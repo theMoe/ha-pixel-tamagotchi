@@ -236,6 +236,8 @@ Die Card respektiert `prefers-reduced-motion` (keine Purzelbäume) und pausiert,
 
 **Custom Cards:** `avoid` und `favorites` vergleichen Teilstrings des Kartentyps. Der Typ ist der Elementname ohne `hui-`-Präfix und `-card`-Suffix – aus `hui-calendar-card` wird `calendar`, aus einer Custom Card `<name>-card` wird `<name>`. Wer wissen will, wie die eigenen Karten heißen, findet die Elementnamen in der Browser-Konsole (F12) über die Elementansicht. Einzelne Karten lassen sich zusätzlich mit `data-pixel="favorite"` bzw. `data-pixel="noclimb"` auszeichnen (siehe [Abschnitt 5](#5-card-ins-dashboard-legen)).
 
+**Wenn die Zeile zu voll ist:** Die Card fordert keine Mindestbreite ein. Stehen in derselben `horizontal-stack` Karten mit fest gesetzter Breite, die die Zeile bereits ausfüllen, bleibt für Pixel nichts übrig und die Karte wird gar nicht mehr dargestellt. Dann entweder `show_status: false` setzen (das Tier auf dem Dashboard bleibt davon unberührt) oder der Card eine eigene Zeile geben.
+
 **Status-Chip in engen Containern:** In `horizontal-stack` oder `custom:stack-in-card` bekommt jede Karte per `flex: 1 1 0` nur einen gleichen Anteil der Zeile. Der Chip rüstet dann stufenweise ab – erst fallen die drei Balken weg, dann Name und Stimmung, zuletzt bleibt nur das Tier. Wer den vollen Chip sehen will, gibt der Card eine eigene Zeile oder in der Sections-View eigene `grid_options`. Geht es ohnehin nur um das Tier auf dem Dashboard, ist `show_status: false` die sauberste Lösung – dann verschwindet die Karte vollständig aus dem Layout.
 
 ## 11. Spielregeln
