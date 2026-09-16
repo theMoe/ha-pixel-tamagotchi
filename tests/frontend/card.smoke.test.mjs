@@ -3,7 +3,6 @@
  * Ausführen: node tests/frontend/card.smoke.test.mjs
  */
 import { JSDOM } from "jsdom";
-import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 
 const html = `<!doctype html><body>
@@ -34,8 +33,21 @@ const errors = [];
 window.addEventListener("error", (e) => errors.push(e.error || e.message));
 process.on("unhandledRejection", (e) => errors.push(e));
 
-// Card-Code laden
-window.eval(readFileSync(new URL("../../custom_components/pixel/frontend/pixel-card.js", import.meta.url), "utf8"));
+// Card-Code laden. Seit 0.1.4 ist die Card in ES-Module aufgeteilt, `window.eval` wertet
+// aber nach dem Script-Goal aus und bricht an der ersten import-Zeile. Deshalb die
+// jsdom-Globals auf globalThis legen und das Einstiegsmodul echt importieren.
+// Reihenfolge ist wichtig: `class PixelCard extends HTMLElement` wird schon beim Auswerten
+// des Moduls gebraucht, HTMLElement muss also vorher stehen.
+for (const name of [
+  "window", "document", "customElements", "HTMLElement", "MouseEvent", "CustomEvent",
+  "Node", "Element", "getComputedStyle", "requestAnimationFrame", "matchMedia",
+]) {
+  globalThis[name] = window[name];
+}
+// performance bewusst NICHT uebernehmen: jsdoms Performance.now() ruft das globale
+// performance auf und geraet in eine Endlosrekursion, sobald es selbst das globale ist.
+// Node bringt ein eigenes mit, und der Mover braucht nur eine monotone Millisekundenuhr.
+await import(new URL("../../custom_components/pixel/frontend/pixel-card.js", import.meta.url).href);
 assert.ok(window.customElements.get("pixel-card"), "Element registriert");
 assert.ok(window.customCards.some((c) => c.type === "pixel-card"), "in customCards eingetragen");
 
@@ -240,15 +252,17 @@ const bar = document.createElement("navbar-card");
 bar.id = "bar";
 rects.bar = [0, 740, 390, 60];
 document.body.appendChild(bar);
-const realComputedStyle = window.getComputedStyle;
-window.getComputedStyle = (el) => (el === bar ? { position: "fixed" } : realComputedStyle(el));
+// Auf globalThis stubben, nicht auf window: der Modulcode laeuft im Node-Realm und
+// greift auf das globale getComputedStyle zu, das beim Import gebunden wurde.
+const realComputedStyle = globalThis.getComputedStyle;
+globalThis.getComputedStyle = (el) => (el === bar ? { position: "fixed" } : realComputedStyle(el));
 document.elementFromPoint = () => bar;
 card._brain.f.scan();
 assert.equal(card._brain.f.floorY, 740 - 12, "Bodenlinie liegt oberhalb der festen Leiste");
 delete document.elementFromPoint;
 card._brain.f.scan();
 assert.equal(card._brain.f.floorY, 800 - 12, "ohne Treffertest bleibt es beim Fensterrand");
-window.getComputedStyle = realComputedStyle;
+globalThis.getComputedStyle = realComputedStyle;
 bar.remove();
 
 // View-Wechsel: solange die alte Karte noch haengt, haelt sie das Tier; danach uebernimmt die neue.
