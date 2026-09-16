@@ -34,6 +34,13 @@ pet:
 
 clean:
   fields:
+    count:
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
     config_entry_id:
       required: false
       selector:

@@ -136,9 +136,44 @@ assert.equal(menu.querySelectorAll("button").length, 6, "5 Basis-Aktionen + Putz
 menu.querySelector("button").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 assert.equal(JSON.stringify(calls.at(-1)), JSON.stringify(["pixel", "feed", { meal: "meal", config_entry_id: "x" }]), "feed-Service mit entry_id");
 
-// Häufchen tippen → clean
-overlay.querySelector(".pixel-poop").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+// Häufchen: getrennte Positionen und einzeln wegputzen
+card.hass = { ...hass, states: { "sensor.pixel_status": { state: "happy", attributes: { ...attrs, poop_count: 3 } } } };
+await tick(10);
+const haufen = () => [...overlay.querySelectorAll(".pixel-poop")];
+assert.equal(haufen().length, 3, "drei Häufchen gerendert");
+
+// Frueher lagen alle auf floorY - 26. _poopSpot() streut jetzt ueber Kartenoberkanten und
+// Boden. 40 Ziehungen statt der drei gerenderten, damit der Test nicht vom Zufall abhaengt.
+const hoehen = new Set(Array.from({ length: 40 }, () => card._brain._poopSpot().y));
+assert.ok(hoehen.size > 1, `Häufchen streuen über mehrere Höhen (gesehen: ${[...hoehen]})`);
+
+// Ein frisch passiertes Häufchen gehört dorthin, wo das Tier gerade steht.
+card._brain.o.place(321, 234);
+card._brain._freshPoop = true;
+// Feldweise vergleichen: Objekte aus dem jsdom-Realm haben ein anderes Object.prototype,
+// deepEqual wuerde daran scheitern.
+const frisch = card._brain._poopSpot();
+assert.equal(frisch.x, 321, "frisches Häufchen landet beim Tier (x)");
+assert.equal(frisch.y, 234, "frisches Häufchen landet beim Tier (y)");
+assert.equal(card._brain._freshPoop, false, "das Flag wird dabei verbraucht");
+
+const mitte = haufen()[1];
+mitte.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 assert.equal(calls.at(-1)[1], "clean");
+assert.equal(calls.at(-1)[2].count, 1, "es wird genau eines weggeputzt");
+assert.equal(haufen().length, 2, "nur das angetippte verschwindet");
+assert.ok(!haufen().includes(mitte), "und zwar genau das angetippte");
+
+// Auch der Besen im Menü putzt einzeln
+card.hass = { ...hass, states: { "sensor.pixel_status": { state: "happy", attributes: { ...attrs, poop_count: 2 } } } };
+await tick(10);
+overlay.querySelector(".pixel-pet").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+await tick(10);
+[...overlay.querySelectorAll(".pixel-menu button")].at(-1).dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+assert.equal(JSON.stringify(calls.at(-1)), JSON.stringify(["pixel", "clean", { count: 1, config_entry_id: "x" }]), "Besen putzt eines");
+
+card.hass = { ...hass, states: { "sensor.pixel_status": { state: "happy", attributes: { ...attrs, poop_count: 1 } } } };
+await tick(10);
 
 // Events vom Bus
 await tick(700); // Begrüßung abwarten

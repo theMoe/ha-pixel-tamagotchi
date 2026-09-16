@@ -220,6 +220,10 @@
       "name": "Clean",
       "description": "Removes poop.",
       "fields": {
+        "count": {
+          "name": "Count",
+          "description": "How many piles to clean up. All of them if omitted."
+        },
         "config_entry_id": {
           "name": "Pet",
           "description": "Only needed when several pets exist."

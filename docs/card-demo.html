@@ -63,6 +63,7 @@
   <label><input type="checkbox" id="sleep"> sleeping</label>
   <label><input type="checkbox" id="anim" checked> animations</label>
   <button id="theme">🌗 hell/dunkel</button>
+  <button id="poop">💩 Häufchen +1</button>
 </div>
 
 <script src="../custom_components/pixel/frontend/pixel-card.js"></script>
@@ -102,7 +103,8 @@
         if (service === "feed") { status.hunger = Math.min(100, status.hunger + 35); status.activity = "eating"; fire("fed"); setTimeout(() => { status.activity = "idle"; push(); status.poop_count++; fire("poop"); push(); }, 4000); }
         if (service === "play") { status.happiness = Math.min(100, status.happiness + 25); status.activity = "playing"; fire("played"); setTimeout(() => { status.activity = "idle"; push(); }, 3000); }
         if (service === "pet") fire("petted");
-        if (service === "clean") { status.poop_count = 0; fire("cleaned"); }
+        // Bildet das Backend nach: ohne count alles, mit count nur so viele.
+        if (service === "clean") { const n = data?.count ?? status.poop_count; status.poop_count = Math.max(0, status.poop_count - n); fire("cleaned"); }
         push();
       },
     };
@@ -123,6 +125,8 @@
   document.querySelector('[data-ev="trick"]').onclick = () => fire("trick", { trick: "random" });
   // Hell/Dunkel umschalten: push() schickt ein neues hass-Objekt, die Card zieht das Theme daraus.
   document.getElementById("theme").onclick = () => { document.documentElement.classList.toggle("light"); push(); };
+  // Zum Nachsehen: liegen die Häufchen verstreut, und putzt ein Tippen wirklich nur eines weg?
+  document.getElementById("poop").onclick = () => { status.poop_count++; fire("poop"); push(); };
   document.getElementById("weather").onchange = (e) => { status.weather = e.target.value; status.outfit = { hat: "", accessory: "", item: "", ...OUTFITS[e.target.value] }; push(); };
   document.getElementById("stage").onchange = (e) => { status.stage = e.target.value; push(); };
   document.getElementById("sleep").onchange = (e) => { status.sleeping = e.target.checked; status.outfit = e.target.checked ? { hat: "sleep_cap", accessory: "", item: "" } : { hat: "", accessory: "", item: "", ...OUTFITS[status.weather] }; push(); };

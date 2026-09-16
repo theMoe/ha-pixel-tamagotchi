@@ -48,6 +48,7 @@ ATTR_TEXT = "text"
 ATTR_DURATION = "duration"
 ATTR_TRICK = "trick"
 ATTR_NAME = "name"
+ATTR_COUNT = "count"
 ATTR_CONFIG_ENTRY = "config_entry_id"
 
 # Frontend
