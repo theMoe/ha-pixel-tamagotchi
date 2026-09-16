@@ -60,6 +60,7 @@ class Activity(StrEnum):
     SLEEPING = "sleeping"
     EATING = "eating"
     PLAYING = "playing"
+    BUILDING = "building"
     SICK = "sick"
     FAINTED = "fainted"
 
@@ -94,6 +95,35 @@ class GameEvent:
 
     type: str
     data: dict[str, Any] = field(default_factory=dict)
+
+
+class BuildKind(StrEnum):
+    """Was das Tier bauen kann."""
+
+    HOUSE = "house"
+    SWING = "swing"
+    FLOWERS = "flowers"
+    SNOWMAN = "snowman"
+    GOLF = "golf"
+
+
+@dataclass
+class Build:
+    """Ein gebautes Objekt.
+
+    ``rx`` ist die waagerechte Lage als Verhältnis 0..1 und gilt für alle Geräte
+    gleichermaßen; die Höhe bestimmt jede Card selbst aus ihrem eigenen Kartenlayout.
+    ``created`` ist bewusst ein ISO-String und kein ``datetime``: ``to_dict`` wandelt nur
+    Felder der obersten Ebene, ein Zeitstempel in der Liste bräche den Roundtrip.
+    """
+
+    id: str = ""
+    kind: str = BuildKind.HOUSE
+    rx: float = 0.5
+    created: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass
@@ -175,6 +205,9 @@ class PetState:
     poop_count: int = 0
     poop_due_at: datetime | None = None
 
+    builds: list[Build] = field(default_factory=list)
+    build_due_at: datetime | None = None
+
     mood_override: Mood | None = None
     mood_override_until: datetime | None = None
 
@@ -233,6 +266,7 @@ _DATETIME_FIELDS = {
     "sick_since",
     "poop_due_at",
     "mood_override_until",
+    "build_due_at",
     "last_fed",
     "last_interaction",
     "house_empty_since",
@@ -252,6 +286,9 @@ def _deserialize_field(key: str, value: Any) -> Any:
             return enum_cls(value)
         except ValueError:
             return None if key == "mood_override" else list(enum_cls)[-1]
+    if key == "builds" and isinstance(value, list):
+        known = Build.__dataclass_fields__
+        return [Build(**{k: v for k, v in item.items() if k in known}) for item in value if isinstance(item, dict)]
     if key == "outfit" and isinstance(value, dict):
         return Outfit(**{k: v for k, v in value.items() if k in Outfit.__dataclass_fields__})
     return value
@@ -260,6 +297,8 @@ def _deserialize_field(key: str, value: Any) -> Any:
 __all__ = [
     "STAGE_ORDER",
     "Activity",
+    "Build",
+    "BuildKind",
     "CalendarEvent",
     "GameEvent",
     "Meal",

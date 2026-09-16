@@ -101,7 +101,8 @@
           "eating": "Eating",
           "playing": "Playing",
           "sick": "Sick",
-          "fainted": "Fainted"
+          "fainted": "Fainted",
+          "building": "Building"
         }
       },
       "outfit": {
@@ -112,6 +113,9 @@
       },
       "status": {
         "name": "Status"
+      },
+      "builds": {
+        "name": "Builds"
       }
     },
     "binary_sensor": {
@@ -317,6 +321,20 @@
         "name": {
           "name": "Name",
           "description": "New name (optional)."
+        },
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
+    },
+    "remove_build": {
+      "name": "Remove build",
+      "description": "Removes a built object.",
+      "fields": {
+        "build_id": {
+          "name": "Object",
+          "description": "Which object to remove. The newest one if omitted."
         },
         "config_entry_id": {
           "name": "Pet",

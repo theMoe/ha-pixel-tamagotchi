@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from conftest import advance, make_world
 
-from engine import CalendarEvent, GameConfig, Mood, PetEngine, PetState, Stage
+from engine import Activity, Build, CalendarEvent, GameConfig, Mood, PetEngine, PetState, Stage
 
 
 def events_of(events, kind):
@@ -191,3 +191,77 @@ def test_from_dict_tolerates_unknown_and_missing_fields():
     assert s.hunger == 12
     assert s.mood_override is None
     assert s.stage is Stage.EGG
+
+
+def test_build_appears_when_happy(engine, world):
+    """Nach der Abklingzeit baut ein zufriedenes Tier etwas."""
+    engine.state.stage = Stage.ADULT
+    engine.state.happiness = 90
+    engine.state.energy = 90
+    engine.tick(world)  # setzt nur die Faelligkeit
+    assert engine.state.build_due_at is not None
+    assert engine.state.builds == []
+    ev = engine.tick(advance(world, hours=engine.cfg.build_interval_hours + 1))
+    assert events_of(ev, "built")
+    assert len(engine.state.builds) == 1
+    assert engine.state.activity is Activity.BUILDING
+
+
+def test_build_respects_limits(engine, world):
+    """Weder bei schlechter Laune noch ueber die Obergrenze hinaus."""
+    engine.state.stage = Stage.ADULT
+    engine.state.energy = 90
+    engine.state.happiness = 10
+    engine.state.build_due_at = world.now
+    engine.tick(world)
+    assert engine.state.builds == []
+
+    for _ in range(engine.cfg.max_builds + 3):
+        _build_once(engine, world)
+    assert len(engine.state.builds) == engine.cfg.max_builds
+
+
+def _build_once(engine, world):
+    """Einen Bauvorgang ausloesen, ohne Zeit vergehen zu lassen.
+
+    Ueber echte Stunden zu ticken wuerde das Tier schlafen, hungern und krank werden -
+    dann greift die Bauregel gar nicht mehr, und der Test pruefte etwas anderes.
+    """
+    engine.state.last_tick = world.now
+    engine.state.stage = Stage.ADULT
+    engine.state.happiness = 90
+    engine.state.energy = 90
+    engine.state.build_due_at = world.now
+    return engine.tick(world)
+
+
+def test_builds_spread_out_and_are_distinct(engine, world):
+    """Die Objekte sollen sich verteilen und nicht alle gleich sein."""
+    for _ in range(4):
+        _build_once(engine, world)
+    rx = [b.rx for b in engine.state.builds]
+    assert len(rx) == 4
+    assert len(set(rx)) == len(rx), "jedes Objekt an einer eigenen Stelle"
+    assert all(0.0 <= x <= 1.0 for x in rx)
+    assert len({b.kind for b in engine.state.builds}) == 4, "vier verschiedene Arten"
+
+
+def test_build_removal_is_idempotent(engine, world):
+    """Zwei Geraete duerfen dasselbe Objekt gleichzeitig antippen."""
+    _build_once(engine, world)
+    bau_id = engine.state.builds[0].id
+    ev = engine.act("remove_build", world, build_id=bau_id)
+    assert ev[0].type == "build_removed"
+    assert engine.state.builds == []
+    ev = engine.act("remove_build", world, build_id=bau_id)
+    assert ev[0].type == "nothing_to_remove"
+
+
+def test_state_roundtrip_with_builds(engine, world):
+    """Die Objektliste muss die Persistenz unveraendert ueberstehen."""
+    engine.state.builds = [Build(id="1", kind="house", rx=0.25, created=world.now.isoformat())]
+    data = engine.state.to_dict()
+    restored = PetState.from_dict(data)
+    assert restored.to_dict() == data
+    assert restored.builds[0].kind == "house"
+    assert restored.builds[0].rx == 0.25

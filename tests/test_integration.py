@@ -68,7 +68,20 @@ async def test_setup_creates_entities_and_services(hass: HomeAssistant, entry: M
     ):
         assert hass.states.get(entity_id) is not None, entity_id
 
-    for service in ("feed", "play", "pet", "clean", "medicine", "sleep", "wake", "set_mood", "say", "trick", "reset"):
+    for service in (
+        "feed",
+        "play",
+        "pet",
+        "clean",
+        "remove_build",
+        "medicine",
+        "sleep",
+        "wake",
+        "set_mood",
+        "say",
+        "trick",
+        "reset",
+    ):
         assert hass.services.has_service(DOMAIN, service)
 
 

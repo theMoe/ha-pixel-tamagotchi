@@ -6,6 +6,8 @@ from .engine import PetEngine
 from .evaluators import MoodEvaluator, OutfitResolver, StressEvaluator
 from .models import (
     Activity,
+    Build,
+    BuildKind,
     CalendarEvent,
     GameEvent,
     Meal,
@@ -21,6 +23,8 @@ from .models import (
 __all__ = [
     "ActionRefused",
     "Activity",
+    "Build",
+    "BuildKind",
     "CalendarEvent",
     "FeedingWindow",
     "GameConfig",

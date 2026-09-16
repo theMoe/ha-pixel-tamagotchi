@@ -67,7 +67,7 @@ SENSORS: tuple[PixelSensorDescription, ...] = (
         translation_key="activity",
         icon="mdi:run",
         device_class=SensorDeviceClass.ENUM,
-        options=["idle", "sleeping", "eating", "playing", "sick", "fainted"],
+        options=["idle", "sleeping", "eating", "playing", "building", "sick", "fainted"],
         value_fn=lambda s: s.get("activity"),
     ),
     PixelSensorDescription(
@@ -76,6 +76,13 @@ SENSORS: tuple[PixelSensorDescription, ...] = (
         icon="mdi:sunglasses",
         value_fn=lambda s: ", ".join(v for v in (s.get("outfit") or {}).values() if v) or "none",
         attributes_fn=lambda s: dict(s.get("outfit") or {}),
+    ),
+    PixelSensorDescription(
+        key="builds",
+        translation_key="builds",
+        icon="mdi:home-plus-outline",
+        value_fn=lambda s: len(s.get("builds") or []),
+        attributes_fn=lambda s: {"items": s.get("builds") or []},
     ),
     PixelSensorDescription(
         key="stress_level",

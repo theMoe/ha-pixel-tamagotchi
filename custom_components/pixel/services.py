@@ -15,6 +15,7 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
 from .const import (
+    ATTR_BUILD_ID,
     ATTR_CONFIG_ENTRY,
     ATTR_COUNT,
     ATTR_DURATION,
@@ -30,6 +31,7 @@ from .const import (
     SERVICE_MEDICINE,
     SERVICE_PET,
     SERVICE_PLAY,
+    SERVICE_REMOVE_BUILD,
     SERVICE_RESET,
     SERVICE_SAY,
     SERVICE_SET_MOOD,
@@ -92,6 +94,11 @@ def _table() -> list[ServiceSpec]:
             vol.Schema({**_BASE, vol.Optional(ATTR_COUNT): vol.All(vol.Coerce(int), vol.Range(min=1))}),
             _clean,
         ),
+        ServiceSpec(
+            SERVICE_REMOVE_BUILD,
+            vol.Schema({**_BASE, vol.Optional(ATTR_BUILD_ID): cv.string}),
+            _remove_build,
+        ),
         ServiceSpec(SERVICE_MEDICINE, vol.Schema(_BASE), _make_simple("medicine")),
         ServiceSpec(SERVICE_SLEEP, vol.Schema(_BASE), _make_simple("sleep")),
         ServiceSpec(SERVICE_WAKE, vol.Schema(_BASE), _make_simple("wake")),
@@ -122,6 +129,10 @@ def _table() -> list[ServiceSpec]:
         ),
         ServiceSpec(SERVICE_RESET, vol.Schema({**_BASE, vol.Optional(ATTR_NAME): cv.string}), _reset),
     ]
+
+
+async def _remove_build(c: PixelCoordinator, call: ServiceCall) -> None:
+    await c.async_act("remove_build", build_id=call.data.get(ATTR_BUILD_ID))
 
 
 async def _clean(c: PixelCoordinator, call: ServiceCall) -> None:

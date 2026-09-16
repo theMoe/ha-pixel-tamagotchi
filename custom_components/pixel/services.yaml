@@ -47,6 +47,18 @@ clean:
         config_entry:
           integration: pixel
 
+remove_build:
+  fields:
+    build_id:
+      required: false
+      selector:
+        text:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel
+
 medicine:
   fields:
     config_entry_id:
