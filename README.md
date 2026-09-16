@@ -289,6 +289,6 @@ cd tests/frontend && npm install && node card.smoke.test.mjs   # Card-Smoke-Test
 
 Die Suite läuft grün gegen HA 2026.9.0 und 2026.8.3 (Python 3.14) sowie 2025.1.4 (Python 3.12).
 
-`docs/card-demo.html` lädt die echte Card mit einem Mock-hass im Browser – zum Ausprobieren ohne Home Assistant. `docs/prototyp.html` ist der ursprüngliche Prototyp, `docs/KONZEPT.md` das Konzept. `PROJEKTSTAND.md` ist das Briefing für die Weiterentwicklung.
+`docs/card-demo.html` lädt die echte Card mit einem Mock-hass im Browser – zum Ausprobieren ohne Home Assistant. Die Seite braucht einen HTTP-Server, weil die Card aus ES-Modulen besteht: `python3 -m http.server 8000` im Projektverzeichnis, dann `http://localhost:8000/docs/card-demo.html`. `docs/prototyp.html` ist der ursprüngliche Prototyp, `docs/KONZEPT.md` das Konzept. `PROJEKTSTAND.md` ist das Briefing für die Weiterentwicklung.
 
 Lizenz: MIT.

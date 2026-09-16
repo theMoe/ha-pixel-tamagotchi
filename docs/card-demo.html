@@ -26,9 +26,24 @@
   /* Bewusst fix am unteren Rand: dient zugleich als Testfall fuer die Erkennung fester Leisten. */
   .ctl{position:fixed;left:0;right:0;bottom:0;background:var(--demo-header);border-top:1px solid var(--demo-line);padding:10px 12px;z-index:20;display:flex;gap:6px;flex-wrap:wrap}
   .ctl button,.ctl select{font:inherit;font-size:13px;background:var(--secondary-background-color);color:var(--primary-text-color);border:1px solid var(--divider-color);border-radius:8px;padding:7px 10px}
+  /* Hinweis, wenn die Seite ueber file:// geoeffnet wurde - dann laedt kein Modul. */
+  .file-hint{display:none;margin:0;padding:14px 16px;background:#b3261e;color:#fff;font-size:14px;line-height:1.5}
+  .file-hint code{background:rgba(0,0,0,.25);padding:2px 6px;border-radius:4px}
 </style>
 </head>
 <body>
+<!-- Die Card besteht seit 0.1.4 aus ES-Modulen. Browser holen Modul-Skripte per CORS, und
+     file:// hat den Origin "null" - das blockiert jeder Browser. Die Demo braucht deshalb
+     einen HTTP-Server. In Home Assistant ist das kein Thema, dort laeuft alles ueber HTTP. -->
+<p class="file-hint" id="fileHint">
+  Diese Seite wurde über <code>file://</code> geöffnet. Die Card besteht aus ES-Modulen, die
+  ein Browser nur über HTTP lädt. Im Projektverzeichnis starten:
+  <code>python3 -m http.server 8000</code> — dann
+  <code>http://localhost:8000/docs/card-demo.html</code> aufrufen.
+</p>
+<script>
+  if (location.protocol === "file:") document.getElementById("fileHint").style.display = "block";
+</script>
 <header>Zuhause · Card-Demo</header>
 
 <!-- Die Demo imitiert die Lovelace-Struktur nur so weit, wie die Card sie braucht: eine *-view mit ha-card-Elementen. -->

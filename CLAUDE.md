@@ -25,7 +25,8 @@ uv pip install --python .venv/bin/python homeassistant==2026.9.0 -r requirements
 .venv/bin/python -m ruff check . && .venv/bin/python -m ruff format .
 
 # Card
-node --check custom_components/pixel/frontend/pixel-card.js
+node --check custom_components/pixel/frontend/*.js
+python3 -m http.server 8000        # Demo-Seite braucht HTTP (ES-Module)
 cd tests/frontend && npm install && node card.smoke.test.mjs
 ```
 
@@ -90,5 +91,5 @@ Modulrollen:
 - **`MAX_TICK_HOURS = 12`** (`engine/engine.py`) kappt das Nachrechnen nach Ausfällen. Tests mit großen Zeitsprüngen laufen dagegen.
 - **Test-Matrix:** `pytest-homeassistant-custom-component` muss exakt zur HA-Version passen; die geprüften Kombinationen stehen als Kommentar in `requirements_test.txt`. `home-assistant-frontend` wird zusätzlich gebraucht.
 - **Overlay-Technik** (bewusste Entscheidung, siehe `PROJEKTSTAND.md` Abschnitt 3): Das Tier hängt am `document.body` mit `position: fixed`; "Verstecken hinter Karten" ist `clip-path: inset(...)`, kein echtes DOM-Einfügen. Karten-Scan per `deepQueryAll` durch alle Shadow Roots. Ein Tier pro Seite (`window.__pixelOverlayOwner`).
-- **jsdom-Test stubbt `getBoundingClientRect`** — Layout- und Clip-Fragen sind damit nicht abgedeckt. Dafür `docs/card-demo.html` im Browser öffnen.
+- **jsdom-Test stubbt `getBoundingClientRect`** — Layout- und Clip-Fragen sind damit nicht abgedeckt. Dafür `docs/card-demo.html` im Browser öffnen — **über HTTP, nicht über `file://`**: die Card besteht aus ES-Modulen, und Browser holen Modul-Skripte per CORS, wobei `file://` den Origin `null` hat. Also `python3 -m http.server 8000` im Projektverzeichnis, dann `http://localhost:8000/docs/card-demo.html`.
 - **Verifikationsstand:** Die Card lief noch nie in einem echten HA-Frontend, die Integration nie auf einer Live-Instanz. Details in `PROJEKTSTAND.md` Abschnitt 5.
