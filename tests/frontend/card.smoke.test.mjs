@@ -221,6 +221,29 @@ await tick(600);
 assert.equal(card._brain.hiding, null, "aufgescheucht");
 assert.equal(overlay.querySelector(".pixel-pet").style.clipPath, "", "Clip entfernt");
 
+// Verweilen: Ortswechsel muessen deutlich in der Minderheit sein.
+// Frueher bekam der Fallback _walkRandom() ueber die Haelfte aller Ticks, zusammen mit
+// _hide und _kickCard waren 88 Prozent der Ticks ein Ortswechsel.
+const { chooseIdleAction } = await import(
+  new URL("../../custom_components/pixel/frontend/idle.js", import.meta.url).href
+);
+const neutral = { mood: "happy", media_playing: false, weather: "cloudy" };
+const gezogen = Array.from({ length: 4000 }, () => chooseIdleAction(card._brain, neutral, false));
+const wechselAnteil = gezogen.filter((a) => !a.still).length / gezogen.length;
+assert.ok(wechselAnteil < 0.45, `Ortswechsel in der Minderheit (gemessen: ${Math.round(wechselAnteil * 100)} %)`);
+assert.ok(wechselAnteil > 0.15, `aber nicht bewegungslos (gemessen: ${Math.round(wechselAnteil * 100)} %)`);
+
+// Waehrend des Verweilens darf keine Zeile mit Ortswechsel gezogen werden.
+const nurStill = Array.from({ length: 500 }, () => chooseIdleAction(card._brain, neutral, true));
+assert.ok(nurStill.every((a) => a.still), "beim Verweilen nur ortsfeste Aktionen");
+
+// Nach einem Ortswechsel setzt _chooseIdleAction eine Verweilzeit.
+card._brain._dwellUntil = 0;
+card._brain.busy = false;
+while (Date.now() >= card._brain._dwellUntil) await card._brain._chooseIdleAction(neutral);
+assert.ok(card._brain._dwellUntil > Date.now(), "nach einem Ortswechsel wird verweilt");
+card._brain._dwellUntil = 0;
+
 // Watchdog: aus einem festhaengenden Versteck muss recover() herausfuehren
 card._brain.hiding = card._brain.f.byType("calendar");
 card._brain._hidingSince = Date.now() - 1000 * 60 * 60;

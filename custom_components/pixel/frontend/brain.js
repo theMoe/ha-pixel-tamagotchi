@@ -2,6 +2,7 @@
 
 import { HIDE_MAX_SECONDS, HIDE_SINK } from "./const.js";
 import { Texts } from "./texts.js";
+import { chooseIdleAction } from "./idle.js";
 import { clamp, deepElementFromPoint, pick, reducedMotion, rnd, wait } from "./util.js";
 
 export class Brain {
@@ -25,6 +26,7 @@ export class Brain {
     this._busySince = 0;
     this._lastLoopAt = 0; // vom Watchdog gelesen: laeuft die Schleife noch?
     this._freshPoop = false; // naechstes Haeufchen entsteht am Standort des Tieres
+    this._dwellUntil = 0; // bis dahin nur ortsfeste Aktionen
   }
 
   t(key, data) {
@@ -187,20 +189,34 @@ export class Brain {
   }
 
   async _chooseIdleAction(s) {
+    const action = chooseIdleAction(this, s, Date.now() < this._dwellUntil);
+    if (!action) return undefined;
+    // Nach einem Ortswechsel bleibt das Tier eine Weile, wo es ist. Das Verweilen ist
+    // damit eine Entscheidung und keine laengere Pause - die Schleife muss weiter im
+    // 3-8-s-Takt ticken, sonst meldet der Watchdog "loop-dead".
+    if (!action.still) this._dwellUntil = Date.now() + rnd(20, 70) * 1000;
+    return action.run(this, s);
+  }
+
+  /**
+   * Stehen bleiben und trotzdem lebendig wirken: umsehen, kurz trippeln, winken,
+   * gelegentlich ein Wort. Alles davon gibt es schon, es wird nur neu kombiniert.
+   */
+  async _linger() {
     const r = Math.random();
-    if (s.mood === "hungry" && r < 0.35) return this._pointAt("entit", this.t("hungry"));
-    if (s.mood === "stressed" && r < 0.35) return this._pointAt("calendar", this.t("stressed"));
-    if (s.mood === "lonely" && r < 0.3) return this.o.say(this.t("lonely"), 1800);
-    if (s.mood === "bored" && r < 0.3) return this.o.say(this.t("bored"), 1800);
-    if (s.media_playing && r < 0.4 && !reducedMotion()) return this._dance();
-    if (s.weather === "rainy" && r < 0.1) return this.o.say(this.t("rain"), 1000);
-    if (s.weather === "sunny" && r < 0.08) return this.o.say(this.t("sunny"), 1400);
-    if (r < 0.18) return this._hide();
-    if (r < 0.26 && !reducedMotion()) return this._trick("tumble");
-    if (r < 0.32) return this._kickCard();
-    if (r < 0.38) return this._jump();
-    if (r < 0.44 && !reducedMotion()) return this._trick("wave");
-    return this._walkRandom();
+    if (r < 0.3) {
+      this.o.rig.face(Math.random() < 0.5);
+      return;
+    }
+    if (r < 0.5) {
+      this.o.rig.legs(1);
+      await wait(180);
+      this.o.rig.legs(-1);
+      return;
+    }
+    if (r < 0.62 && !reducedMotion()) return this.o.rig.play("wave", 1200);
+    if (r < 0.7) return this.o.say(this.t("linger"), 1600);
+    return undefined; // einfach dastehen
   }
 
   /* ---------------- Aktionen */
