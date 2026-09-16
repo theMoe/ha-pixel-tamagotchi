@@ -93,6 +93,7 @@ Karten lassen sich gezielt beeinflussen (Attribut am Karten-Element, z. B. über
 
 | Aktion | Wirkung |
 |---|---|
+| **Tippen** auf ein gebautes Objekt | Reißt es ab. |
 | **Tippen** auf ein Häufchen | Räumt genau dieses weg. Der Besen im Menü ebenfalls eines pro Tipp. |
 | **Tippen** auf Pixel | Menü: Füttern 🍎, Snack 🍪, Leckerli 🍬, Spielen ⚽, Streicheln ✋ – plus Putzen 🧹 / Medizin 💊, wenn nötig |
 | **Lange drücken** | Statistik: Werte, Alter, Stufe, Fütterungen (wer hat am meisten gefüttert) |
@@ -132,6 +133,7 @@ Alle Services akzeptieren optional `config_entry_id`, falls mehrere Tiere existi
 | `pixel.play` | – | +25 Laune, −8 Energie (unter 20 Energie: zu müde) |
 | `pixel.pet` | – | +5 Laune |
 | `pixel.clean` | `count` (optional) | Häufchen entfernen; ohne `count` alle, sonst so viele |
+| `pixel.remove_build` | `build_id` (optional) | Gebautes Objekt abreißen; ohne Angabe das zuletzt gebaute |
 | `pixel.medicine` | – | Heilt bei Krankheit/Ohnmacht, sonst „bäh“ |
 | `pixel.sleep` / `pixel.wake` | – | Manuell schlafen legen / wecken |
 | `pixel.set_mood` | `mood`, `minutes` | Stimmung zeitweise erzwingen, `auto` hebt auf |
@@ -139,7 +141,7 @@ Alle Services akzeptieren optional `config_entry_id`, falls mehrere Tiere existi
 | `pixel.trick` | `trick`: random / tumble / jump / kick / hide / wave | Trick auf dem Dashboard |
 | `pixel.reset` | `name` | Neues Ei (Statistik bleibt) |
 
-**Events:** Die Integration feuert `pixel_event` mit `type` (z. B. `fed`, `hungry`, `poop`, `sick`, `fainted`, `evolved`, `welcome_home`, `appointment_soon`, `feeding_time`, `fell_asleep`, `woke_up`, `mood_changed`) plus Details. Darauf lassen sich Automationen bauen.
+**Events:** Die Integration feuert `pixel_event` mit `type` (z. B. `fed`, `hungry`, `poop`, `sick`, `fainted`, `evolved`, `welcome_home`, `appointment_soon`, `feeding_time`, `fell_asleep`, `woke_up`, `mood_changed`, `built`, `build_removed`) plus Details. Darauf lassen sich Automationen bauen.
 
 ## 9. Automationsbeispiele
 
@@ -253,6 +255,7 @@ Die Card respektiert `prefers-reduced-motion` (keine Purzelbäume) und pausiert,
 - **Stufen** (bei durchschnittlicher Pflege): Ei 1 Tag → Baby → Kind ab Tag 4 → Teenager ab Tag 11 → Erwachsen ab Tag 25 → Senior ab Tag 90. Gute Pflege beschleunigt um bis zu 30 %, schlechte verzögert bis zu 50 %.
 - **Stimmung** (Priorität): ohnmächtig › krank › schlafend › hungrig (< 30) › gestresst (≥ 6 Termine) › einsam (Haus > 4 h leer und Laune < 40) › aufgeregt (jemand kommt heim, spielt) › beschäftigt (≥ 3 Termine) › gelangweilt (> 6 h keine Interaktion) › fröhlich.
 - **Outfit:** Sonne → Sonnenbrille (+Eis ab 26 °C, +Mütze unter 8 °C); Regen/Gewitter → Schirm; Schnee → Mütze und Schal; Wind → Schal; Nebel → Laterne; 3–5 Termine → Klemmbrett; ab 6 → Kaffee; Dezember → Nikolausmütze; Ende Oktober → Kürbis; März/April am Wochenende → Hasenohren.
+- **Bauen:** Alle 8 Stunden baut Pixel etwas, wenn es wach, gesund, gut gelaunt (≥ 60) und ausgeruht (≥ 35) ist – Haus, Golfloch, Schaukel oder Blumenbeet, im Winter einen Schneemann. Höchstens vier Objekte gleichzeitig. Ein Tipp auf ein Objekt reißt es ab (−3 Laune). Solange etwas steht, geht Pixel immer mal wieder hin und beschäftigt sich damit.
 - **Ausfälle:** Nach Neustarts oder Stromausfall werden höchstens 12 Stunden nachgerechnet – Pixel verhungert nicht, weil HA ein Wochenende aus war.
 
 Alle Zahlen stehen in `custom_components/pixel/engine/config.py`.
@@ -267,6 +270,7 @@ Alle Zahlen stehen in `custom_components/pixel/engine/config.py`.
 | Mehrere Pixel gleichzeitig | Auf einer Seite läuft immer nur ein Tier – die erste Card gewinnt. Weitere Cards zeigen nur ihren Status-Chip. |
 | Pixel ist im hellen Theme kaum zu sehen | Ab 0.1.2 passt sich die Card dem Theme an. Bleibt es blass: Browser hart neu laden, damit die neue Card-Version geladen wird. |
 | Pixel verschwindet nach einem Wechsel der View | Ab 0.1.2 behoben. Vorher half nur Neuladen. Prüfen, ob die geladene Card-Version aktuell ist (`/pixel-static/pixel-card.js?v=…`). |
+| Gebautes Objekt steht an einer komischen Stelle | Die waagerechte Lage kommt aus dem Backend und ist auf allen Geräten gleich; die Höhe sucht sich jede Card selbst. Auf ungewöhnlichen Layouts landet es notfalls auf der Bodenlinie. Antippen entfernt es. |
 | Pixel ist verschwunden und kommt nicht wieder | Bis 0.1.2 blieb das Tier hinter einer Karte hängen. Ab 0.1.3 behoben; ein Wächter holt es zusätzlich alle 20 s zurück, falls es doch festhängt. Prüfen, ob die geladene Card-Version aktuell ist. |
 | Pixel läuft über der Navigationsleiste | Sollte automatisch erkannt werden; sonst `floor_margin` auf die Höhe der Leiste setzen. |
 | Kalender wird ignoriert | Die Integration nutzt `calendar.get_events`; die Kalender-Integration muss diese Aktion unterstützen (Google, CalDAV, lokale Kalender: ja). |
