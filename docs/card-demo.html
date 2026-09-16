@@ -83,7 +83,10 @@
 </div>
 
 <script type="module" src="../custom_components/pixel/frontend/pixel-card.js"></script>
-<script>
+<!-- Als Modul, nicht als klassisches Skript: Modul-Skripte sind immer defer und laufen
+     erst nach dem Parsen. Ein klassisches Inline-Skript wuerde also VOR der Card laufen,
+     und card.setConfig gaebe es noch nicht. -->
+<script type="module">
   // --------- Minimales ha-card, damit der Kartenhintergrund auch im Shadow-Root der Card sichtbar ist.
   // In echtem HA liefert ha-card den Hintergrund; ohne Definition bliebe er hier unsichtbar
   // und genau der gemeldete Fehler (Inhalt ragt ueber den Hintergrund) waere nicht erkennbar.
@@ -126,6 +129,9 @@
       },
     };
   }
+  // Zusaetzliche Absicherung, unabhaengig von der Skriptreihenfolge.
+  await customElements.whenDefined("pixel-card");
+
   const card = document.getElementById("card");
   const card2 = document.getElementById("card2"); // nur Chip; das Tier haelt bereits card (__pixelOverlayOwner)
   function push() { status.mood = status.sleeping ? "sleeping" : status.hunger < 30 ? "hungry" : "happy"; const h = makeHass(); card.hass = h; card2.hass = h; }
