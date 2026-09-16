@@ -17,6 +17,13 @@ const CARD_TAG = "pixel-card";
 const DOMAIN = "pixel";
 const EVENT_TYPE = "pixel_event";
 const PET_BASE_SIZE = 64;
+// Wie tief das Tier beim Verstecken hinter die Kartenkante sinkt, als Anteil seiner Groesse.
+// Das Rig zeichnet in viewBox "-4 -4 24 22", also 2,67 px je Einheit bei 2,67 px Versatz:
+// die Kopfoberkante liegt bei 18,7 px. Bei 0.6 bleiben 25,6 px sichtbar, der Kopf lugt also
+// ueber die Kante. Der fruehere Wert 0.8 liess nur 12,8 px stehen - da war nichts mehr zu sehen.
+const HIDE_SINK = 0.6;
+const HIDE_MAX_SECONDS = 90; // danach kommt das Tier von selbst wieder hervor
+const WATCHDOG_INTERVAL_MS = 20000;
 
 const DEFAULT_CONFIG = {
   entity: null,
@@ -720,6 +727,9 @@ class Brain {
     this._lastActivity = null;
     this._lastMood = null;
     this._lastStage = null;
+    this._hidingSince = 0; // Zeitstempel, damit das Versteck nicht ewig dauert
+    this._busySince = 0;
+    this._lastLoopAt = 0; // vom Watchdog gelesen: laeuft die Schleife noch?
   }
 
   t(key, data) {
@@ -805,6 +815,7 @@ class Brain {
    * `update()` laeuft weiter, damit das Tier nach dem Aufwachen sofort richtig aussieht.
    */
   _covered() {
+    if (this.hiding) return false; // selbst geclippt ist keine fremde Verdeckung
     if (!document.elementFromPoint) return false;
     const x = Math.round(this.o.pos.x + this.o.size / 2);
     const y = Math.round(this.o.pos.y - this.o.size / 2);
@@ -817,26 +828,39 @@ class Brain {
     while (this.running && token === this._loopToken) {
       await wait(rnd(this.config.idle_min_seconds, this.config.idle_max_seconds) * 1000);
       if (!this.running || token !== this._loopToken) return;
-      if (this.busy || !this.snap || document.visibilityState === "hidden") continue;
-      if (this.snap.animations_enabled === false) continue;
-      if (this._covered()) continue; // Bildschirmschoner oder Dialog davor: nichts zu sehen, nichts zu tun
-
-      const s = this.snap;
-      if (s.fainted) continue;
-      if (s.sleeping) {
-        if (Math.random() < 0.6) this.o.fx("zzz", "z", 30);
-        continue;
+      this._lastLoopAt = Date.now();
+      // Ohne diesen Schutz beendet eine einzige Exception die Schleife endgueltig:
+      // `running` bliebe true, und `start()` stiege sofort wieder aus.
+      try {
+        await this._loopStep();
+      } catch (err) {
+        console.warn("[pixel-card] Idle-Schritt fehlgeschlagen", err);
       }
-      if (this.hiding) {
-        await this._peek();
-        continue;
-      }
-      if (s.stage === "egg") {
-        if (Math.random() < 0.5) await this.o.rig.play("wobble", 800);
-        continue;
-      }
-      await this._chooseIdleAction(s);
     }
+  }
+
+  async _loopStep() {
+    if (this.busy || !this.snap || document.visibilityState === "hidden") return;
+    if (this.snap.animations_enabled === false) return;
+
+    const s = this.snap;
+    if (s.fainted) return;
+    if (s.sleeping) {
+      if (Math.random() < 0.6) this.o.fx("zzz", "z", 30);
+      return;
+    }
+    // Vor der Verdeckungspruefung: im Versteck ist das Tier absichtlich geclippt,
+    // und nur `_peek()` holt es dort wieder hervor.
+    if (this.hiding) {
+      if (Date.now() - this._hidingSince > HIDE_MAX_SECONDS * 1000) return this._unhide(false);
+      return this._peek();
+    }
+    if (this._covered()) return; // Bildschirmschoner oder Dialog davor: nichts zu sehen, nichts zu tun
+    if (s.stage === "egg") {
+      if (Math.random() < 0.5) await this.o.rig.play("wobble", 800);
+      return;
+    }
+    await this._chooseIdleAction(s);
   }
 
   async _chooseIdleAction(s) {
@@ -861,12 +885,32 @@ class Brain {
   async _interrupt(fn) {
     if (this.busy) return;
     this.busy = true;
+    this._busySince = Date.now();
     this.m.cancel();
     try {
       await fn();
     } finally {
       this.busy = false;
     }
+  }
+
+  /**
+   * Holt das Tier aus jedem Zustand zurueck, aus dem es allein nicht mehr herausfindet.
+   * Einziger Ort, der dafuer die internen Felder anfassen darf; der Watchdog erkennt nur.
+   */
+  recover(reason) {
+    console.warn(`[pixel-card] Tier wird zurueckgeholt (${reason})`);
+    this.hiding = null;
+    this.anchor = null;
+    this.busy = false;
+    this.m.cancel();
+    this.o.clipBelow(null);
+    if (this.snap) this.o.rig.apply(this.snap, { hidden: false });
+    this.f.scan();
+    const x = clamp(this.o.pos.x, this.f.bounds.left, Math.max(this.f.bounds.left, this.f.bounds.right - this.o.size));
+    this.o.place(x, this.f.floorY);
+    if (!this.running) this.start();
+    else this._loop(++this._loopToken); // alte Schleife abhaengen, frische starten
   }
 
   _rescan() {
@@ -910,9 +954,10 @@ class Brain {
     const ok = await this.m.to(c.x1 + offsetX, c.top);
     if (!ok) return;
     this.hiding = c;
+    this._hidingSince = Date.now();
     this.o.rig.apply(this.snap, { hidden: true });
     const clip = () => this.o.clipBelow(c.top);
-    await this.m.to(this.o.pos.x, c.top + this.o.size * 0.8, { dur: 400, hop: 0, keepFacing: true, onFrame: clip });
+    await this.m.to(this.o.pos.x, c.top + this.o.size * HIDE_SINK, { dur: 400, hop: 0, keepFacing: true, onFrame: clip });
     clip();
     this.o.say(this.t("hide"), 1500);
   }
@@ -1039,6 +1084,54 @@ class Brain {
   }
 }
 
+/* ------------------------------------------------------------------ Watchdog */
+
+/**
+ * Erkennt Zustaende, aus denen das Tier allein nicht mehr herausfindet, und meldet sie.
+ * Bewusst ohne eigene Reparatur: das Gehirn repariert sich selbst (`Brain.recover`), der
+ * Besitzerwechsel gehoert der Card. Laeuft selten und ohne Karten-Scan.
+ */
+class Watchdog {
+  constructor({ overlay, brain, onOverlayLost }) {
+    this.o = overlay;
+    this.b = brain;
+    this.onOverlayLost = onOverlayLost;
+    this._timer = null;
+  }
+
+  start() {
+    this._timer = setInterval(() => this.check(), WATCHDOG_INTERVAL_MS);
+  }
+
+  stop() {
+    clearInterval(this._timer);
+    this._timer = null;
+  }
+
+  check() {
+    if (!this.o.el.isConnected) return this.onOverlayLost();
+
+    const reason = this._defect();
+    if (reason) this.b.recover(reason);
+  }
+
+  /** Gibt den Grund zurueck, warum das Tier festhaengt - oder null, wenn alles in Ordnung ist. */
+  _defect() {
+    const now = Date.now();
+    const b = this.b;
+    if (!this.o.petEl.style.width) return "unplaced";
+    if (this.o.petEl.style.clipPath && !b.hiding) return "stale-clip";
+    if (b.hiding && now - b._hidingSince > HIDE_MAX_SECONDS * 1000) return "hide-timeout";
+    if (b.busy && now - b._busySince > 30000) return "busy-stuck";
+    if (b.running && b._lastLoopAt && now - b._lastLoopAt > b.config.idle_max_seconds * 3000) return "loop-dead";
+
+    const { bounds, size } = { bounds: b.f.bounds, size: this.o.size };
+    const { x, y } = this.o.pos;
+    const outside = x + size < bounds.left || x > bounds.right || y < bounds.top || y - size > bounds.bottom;
+    return outside ? "out-of-bounds" : null;
+  }
+}
+
 /* ------------------------------------------------------------------ Card */
 
 const CARD_CSS = `
@@ -1083,6 +1176,7 @@ class PixelCard extends HTMLElement {
     this._hass = null;
     this._overlay = null;
     this._brain = null;
+    this._watchdog = null;
     this._unsubEvents = null;
     this._lastAttrs = null;
     this._onResize = this._debounce(() => this._brain?._rescan(), 150);
@@ -1180,12 +1274,25 @@ class PixelCard extends HTMLElement {
 
     if (this._lastAttrs) this._brain.update(this._lastAttrs);
     this._brain.start();
+    this._watchdog = new Watchdog({
+      overlay: this._overlay,
+      brain: this._brain,
+      // Raeumt ein fremdes Skript den body ab, ist das Overlay weg, `_overlay` aber gesetzt -
+      // dann blockiert die Card sich selbst und jede andere. Also loslassen und neu aufbauen.
+      onOverlayLost: () => {
+        this._unmount();
+        this._mount();
+      },
+    });
+    this._watchdog.start();
     this._subscribe();
     setTimeout(() => this._brain?._rescan(), 800); // Karten laden oft verzögert
   }
 
   _unmount() {
     if (!this._overlay) return;
+    this._watchdog?.stop();
+    this._watchdog = null;
     this._brain?.stop();
     this._overlay.destroy();
     this._overlay = null;

@@ -154,10 +154,44 @@ card._brain.busy = false;
 await card._brain._interrupt(() => card._brain._hide(card._brain.f.byType("calendar")));
 assert.ok(card._brain.hiding, "versteckt");
 assert.ok(overlay.querySelector(".pixel-pet").style.clipPath.includes("inset"), "Clip aktiv");
+// Kern der 0.1.2-Regression: _covered() sah den eigenen Clip als fremde Verdeckung und
+// blockierte damit _peek(), den einzigen Weg aus dem Versteck heraus. jsdom kennt
+// elementFromPoint nicht, deshalb wird der Treffertest hier gestubbt - sonst greift
+// schon der Feature-Guard und der Test waere wirkungslos.
+document.elementFromPoint = () => document.querySelector("hui-calendar-card ha-card");
+assert.equal(card._brain._covered(), false, "der eigene Clip zaehlt nicht als Verdeckung");
+const echtesVersteck = card._brain.hiding;
+card._brain.hiding = null;
+assert.equal(card._brain._covered(), true, "eine fremde Karte davor zaehlt sehr wohl");
+card._brain.hiding = echtesVersteck;
+delete document.elementFromPoint;
+// Der Kopf muss ueber der Kartenkante stehen bleiben, sonst ist das Tier faktisch weg.
+const sank = card._brain.hiding.top - card._brain.o.pos.y;
+assert.ok(Math.abs(sank) < card._brain.o.size, "das Tier sinkt nicht komplett hinter die Karte");
+
 document.dispatchEvent(new window.MouseEvent("click", { bubbles: true, clientX: 250, clientY: 120 }));
 await tick(600);
 assert.equal(card._brain.hiding, null, "aufgescheucht");
 assert.equal(overlay.querySelector(".pixel-pet").style.clipPath, "", "Clip entfernt");
+
+// Watchdog: aus einem festhaengenden Versteck muss recover() herausfuehren
+card._brain.hiding = card._brain.f.byType("calendar");
+card._brain._hidingSince = Date.now() - 1000 * 60 * 60;
+card._brain.busy = true;
+card._brain.o.clipBelow(card._brain.hiding.top);
+assert.ok(card._watchdog, "Watchdog laeuft");
+card._watchdog.check();
+assert.equal(card._brain.hiding, null, "Watchdog loest das Versteck");
+assert.equal(card._brain.busy, false, "Watchdog loest die Blockade");
+assert.equal(overlay.querySelector(".pixel-pet").style.clipPath, "", "Watchdog entfernt den Clip");
+
+// Eine Exception im Idle-Schritt darf die Schleife nicht toeten
+const echterSchritt = card._brain._loopStep.bind(card._brain);
+card._brain._loopStep = () => { throw new Error("Testfehler"); };
+card._brain._lastLoopAt = 0;
+await tick(50);
+card._brain._loopStep = echterSchritt;
+assert.ok(card._brain.running, "Schleife laeuft nach einer Exception weiter");
 
 // Zustand ändern: schlafen
 card.hass = { ...hass, states: { "sensor.pixel_status": { state: "sleeping", attributes: { ...attrs, sleeping: true, outfit: { hat: "sleep_cap" } } } } };
