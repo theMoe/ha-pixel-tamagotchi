@@ -25,9 +25,11 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
     hass.data[_DATA_KEY] = True
 
     frontend_dir = Path(__file__).parent / "frontend"
-    await hass.http.async_register_static_paths(
-        [StaticPathConfig(FRONTEND_URL_BASE, str(frontend_dir), cache_headers=False)]
-    )
-    url = f"{FRONTEND_URL_BASE}/{CARD_FILENAME}?v={VERSION}"
+    # Versioniertes Pfadsegment statt "?v=": die Card besteht aus mehreren ES-Modulen, und
+    # ein relativer Import erbt die Query nicht. Unter /pixel-static/<version>/ loesen die
+    # Imports der Module automatisch mit auf, ein Versionswechsel bustet also alle auf einmal.
+    base = f"{FRONTEND_URL_BASE}/{VERSION}"
+    await hass.http.async_register_static_paths([StaticPathConfig(base, str(frontend_dir), cache_headers=False)])
+    url = f"{base}/{CARD_FILENAME}"
     add_extra_js_url(hass, url)
     _LOGGER.debug("Pixel-Card registriert unter %s", url)

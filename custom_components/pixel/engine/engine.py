@@ -120,6 +120,7 @@ class PetEngine:
             "sick": s.is_sick,
             "fainted": s.fainted,
             "poop_count": s.poop_count,
+            "builds": [b.as_dict() for b in s.builds],
             "needs_attention": self.needs_attention(w),
             "total_feeds": s.total_feeds,
             "total_plays": s.total_plays,

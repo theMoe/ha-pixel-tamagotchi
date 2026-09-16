@@ -74,6 +74,16 @@ class GameConfig:
     playing_seconds: int = 15
     mood_override_minutes: int = 30
 
+    # Bauen
+    build_interval_hours: float = 8.0
+    build_min_happiness: float = 60.0
+    build_min_energy: float = 35.0
+    build_energy_cost: float = 6.0
+    build_happiness: float = 8.0
+    max_builds: int = 4
+    building_seconds: int = 25
+    remove_build_happiness_penalty: float = 3.0
+
     # Stufen: Mindestalter in Tagen bei durchschnittlicher Pflege
     stage_days: dict[Stage, int] = field(
         default_factory=lambda: {

@@ -11,7 +11,18 @@ from datetime import timedelta
 from typing import Protocol
 
 from .config import GameConfig
-from .models import STAGE_ORDER, Activity, GameEvent, Mood, PetState, Stage, WorldContext
+from .models import (
+    STAGE_ORDER,
+    Activity,
+    Build,
+    BuildKind,
+    GameEvent,
+    Mood,
+    PetState,
+    Stage,
+    WeatherKind,
+    WorldContext,
+)
 
 
 def clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
@@ -148,6 +159,63 @@ class PoopRule:
             s.poop_due_at = None
             s.poop_count += 1
             ctx.emit("poop", count=s.poop_count)
+
+
+class BuildRule:
+    """Bei guter Laune baut das Tier ab und an etwas auf das Dashboard.
+
+    Die Fälligkeit steht im ``PetState`` und nicht in der Regelinstanz: regelinterner
+    Zustand überlebt weder einen Neustart noch ``apply_settings``.
+    """
+
+    def apply(self, ctx: TickContext) -> None:
+        s, w, cfg = ctx.state, ctx.world, ctx.cfg
+        if s.sleeping or s.fainted or s.is_sick or s.stage is Stage.EGG:
+            return
+        if s.build_due_at is None:
+            s.build_due_at = w.now + timedelta(hours=cfg.build_interval_hours)
+            return
+        if w.now < s.build_due_at:
+            return
+        s.build_due_at = w.now + timedelta(hours=cfg.build_interval_hours)
+        if len(s.builds) >= cfg.max_builds:
+            return
+        if s.happiness < cfg.build_min_happiness or s.energy < cfg.build_min_energy:
+            return
+
+        build = Build(
+            id=str(int(w.now.timestamp())),
+            kind=str(_pick_kind(s, w)),
+            rx=_next_rx(s),
+            created=w.now.isoformat(),
+        )
+        s.builds.append(build)
+        s.energy = clamp(s.energy - cfg.build_energy_cost)
+        s.happiness = clamp(s.happiness + cfg.build_happiness)
+        s.activity = Activity.BUILDING
+        s.activity_until = w.now + timedelta(seconds=cfg.building_seconds)
+        ctx.emit("built", id=build.id, kind=build.kind, rx=build.rx)
+
+
+def _pick_kind(s: PetState, w: WorldContext) -> BuildKind:
+    """Ohne Zufallsquelle: Wetter und Jahreszeit entscheiden, sonst der Reihe nach."""
+    vorhanden = {b.kind for b in s.builds}
+    winter = w.weather is WeatherKind.SNOWY or w.local_now.month in (12, 1, 2)
+    if winter and str(BuildKind.SNOWMAN) not in vorhanden:
+        return BuildKind.SNOWMAN
+    for kind in (BuildKind.HOUSE, BuildKind.GOLF, BuildKind.SWING, BuildKind.FLOWERS):
+        if str(kind) not in vorhanden:
+            return kind
+    return BuildKind.FLOWERS
+
+
+def _next_rx(s: PetState) -> float:
+    """Möglichst weit weg von dem, was schon steht - die Objekte sollen sich verteilen."""
+    belegt = [b.rx for b in s.builds]
+    if not belegt:
+        return 0.5
+    kandidaten = [0.08 + 0.84 * i / 6 for i in range(7)]
+    return max(kandidaten, key=lambda x: min(abs(x - b) for b in belegt))
 
 
 class HealthRule:
@@ -305,6 +373,7 @@ def default_rules() -> list[Rule]:
         HealthRule(),
         CareScoreRule(),
         StageRule(),
+        BuildRule(),
         ActivityExpiryRule(),
         MoodOverrideExpiryRule(),
         AppointmentRule(),

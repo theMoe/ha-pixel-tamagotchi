@@ -1,7 +1,7 @@
 # PROJEKTSTAND – Pixel, Dashboard-Tamagotchi für Home Assistant
 
 > Briefing für die nächste Session. Zuerst lesen, dann `README.md` für Nutzersicht, `docs/KONZEPT.md` für die Idee.
-> Stand: 16.09.2026 · Version 0.1.3 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
+> Stand: 16.09.2026 · Version 0.1.4 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
 
 ## 1. Was ist das
 
@@ -62,6 +62,10 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 13. **Selbstheilung statt Konfiguration.** `Brain.recover()` ist der einzige Ort, der die internen Felder des Gehirns zurücksetzt; `Watchdog` erkennt nur und repariert nichts selbst. Der Besitzerwechsel bleibt bei der Card, weil ihr der Lebenszyklus gehört. Kein Konfigurationsschlüssel dafür — die Konfigurationsfläche bleibt klein (siehe 11).
 14. **Häufchen-Positionen bleiben clientseitig**, als Verhältnis zur Bounds-Box gespeichert. Konsequenz: auf zwei Geräten liegen sie an verschiedenen Stellen, und putzt Gerät A eines weg, verschwindet auf Gerät B irgendeines. Identische Positionen gäbe es nur mit Häufchen-Identität im `PetState`; das gehört zum Positions-Sync im Backlog und wäre hier überzogen.
 
+15. **Card als ES-Module, weiter ohne Build-Schritt.** `add_extra_js_url` ohne `es5`-Flag legt die URL unter `DATA_EXTRA_MODULE_URL` ab, HA rendert also `<script type="module">`; relative Imports funktionieren damit nativ. `StaticPathConfig` registriert das **Verzeichnis**, neue Module werden ohne Zutun ausgeliefert. Cachebusting über ein **versioniertes Pfadsegment** (`/pixel-static/<version>/`) statt `?v=`: ein relativer Specifier erbt die Query nicht, sonst wären die Untermodule ungebustet geblieben. Die Version steht weiterhin nur in `const.py`.
+16. **Idle-Verhalten als gewichtete Tabelle** (`idle.js`) statt einer if-Kaskade auf einer geteilten Zufallszahl. Jedes Gewicht ist ein echter Anteil, jede Zeile trägt `still`, und eine neue Aktion ist eine Datenzeile. Verweilen ist eine **Entscheidung** (`_dwellUntil`), keine verlängerte Schleifenpause — die Watchdog-Grenze `idle_max_seconds * 3000` verbietet Letzteres.
+17. **Gebaute Objekte: waagerecht zentral, senkrecht lokal.** Das Backend speichert `rx` (0..1), jede Card sucht sich die Höhe aus ihrem eigenen Kartenlayout. Das Objekt steht damit überall an derselben relativen Stelle und überlebt jedes Neuladen, sitzt aber trotzdem auf einer sinnvollen Fläche. `BUILD_KINDS` in `builds.js` ist die einzige Wahrheit je Art — eine neue Art ist eine Zeile plus ein SVG.
+
 ## 4. Konventionen
 
 - Python 3.12+, Ruff (`pyproject.toml`: line-length 120, Regeln E F I UP B SIM RUF ANN). `ruff check . && ruff format .` muss sauber sein.
@@ -76,7 +80,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 
 | Bereich | Status |
 |---|---|
-| Engine | 37 Tests grün. Balancing plausibel, aber **nicht im Alltag erprobt** (Zahlen ggf. nach 1–2 Wochen nachjustieren). |
+| Engine | 42 Tests grün. Balancing plausibel, aber **nicht im Alltag erprobt** (Zahlen ggf. nach 1–2 Wochen nachjustieren). |
 | Integration | 10 Tests grün gegen **HA 2026.9.0 und 2026.8.3 (Python 3.14)** sowie 2025.1.4 (Python 3.12); keine Deprecation-Hinweise zu `custom_components.pixel`. Ruff sauber unter 3.14. **Nicht auf einer Live-Instanz gestartet.** |
 | Config-Flow | Programmatisch geprüft (Import, Schema). UI-Durchlauf nicht getestet. |
 | Card | jsdom-Smoke-Test grün, `node --check` sauber, Demo-Seite vorhanden. **Im echten HA-Frontend noch nie gelaufen**, aber gegen ein reales Dashboard-YAML (Sections-View, fixe Navigations-Card, Wallpanel-Kiosk, durchweg Custom Cards) durchgesehen – die Befunde daraus sind in 0.1.2 eingearbeitet. **Die Farbwerte des hellen Themes sind rechnerisch gewählt und noch nicht im Browser beurteilt** → `docs/card-demo.html` öffnen, Umschalter „hell/dunkel“ × Stufe „egg“. Verbleibendes Restrisiko: Touch-Verhalten auf dem Pi-Kiosk, Erkennung ungewöhnlicher fixer Leisten, `position: fixed` des Overlays, falls Wallpanel `transform`/`filter` auf `body` setzt (das würde die Koordinaten verschieben). |
@@ -101,7 +105,6 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - Visueller Editor für die Card (`getConfigElement`) – aktuell nur YAML/Karten-Picker mit Stub.
 
 **P2 – Konzept-Features noch offen**
-- **Das Tier baut kleine Objekte** (Häuschen, Zaun), die sich per Tipp wieder entfernen lassen. Die Kette steht, damit die nächste Session nicht neu recherchieren muss: `PetState.builds: list[Build]` mit `field(default_factory=list)` → Zweig in `_deserialize_field` analog zum vorhandenen `outfit`-Zweig → **keine `datetime` innerhalb der Liste**, weil `to_dict` nur Felder der obersten Ebene nach ISO wandelt → eine Zeile in `snapshot()`, danach landet es über `attributes_fn=lambda s: dict(s)` automatisch im Status-Sensor → `BuildRule` neben `PoopRule` plus Eintrag in `default_rules()` → Aktion `remove_build(build_id)` (Vorbild `clean`) → `ServiceSpec` + `services.yaml` + drei Übersetzungsdateien → in der Card ein `syncBuilds()` nach Vorbild der Häufchen plus Zweig in `Brain.onEvent` → Texte in `Texts.de`/`en` → Events-Liste in README §8. Store-Migration ist nicht nötig, `from_dict` ignoriert unbekannte und ergänzt fehlende Felder. **Zwei Entscheidungen fallen dabei an:** sollen die Objekte auf allen Geräten an derselben Stelle stehen, muss die Position ins Backend-Feld (anders als bei den Häufchen) — und die Card hat mit 1525 Zeilen die 1500-Zeilen-Grenze bereits überschritten, die Entscheidung über den Build-Schritt steht also ohnehin an (siehe P3).
 - Positions-Sync über mehrere Clients (Backend-Entity `position`, Card interpoliert).
 - Weitere Tricks aus dem Konzept: Sensorziffern „stehlen“, Seifenblasen, Kreide-Smiley, Angeln, Schaukeln, Schlafwandeln.
 - Weitere Trigger: Fenster offen bei Kälte (Schal, zeigt auf Fenster-Kachel), Luftqualität (Maske), Batterie leer (trägt Batterie), Müllabfuhr-Kalender, PV-Überschuss.
@@ -115,7 +118,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - Diagnostics-Plattform (`diagnostics.py`) für Support.
 - Repairs-Issue, wenn Wetter-/Kalender-Entity fehlt.
 - GitHub Actions: pytest, ruff, hassfest, HACS-Validation.
-- Card in TypeScript/Lit mit Build – die Schwelle von ~1500 Zeilen ist seit 0.1.3 erreicht (1525). Vor dem nächsten größeren Card-Feature entscheiden: Build-Schritt einführen oder die Datei bewusst in mehrere ES-Module aufteilen, die `frontend.py` einzeln ausliefert.
+- Card in TypeScript/Lit mit Build – **entschieden gegen einen Build-Schritt** (Entscheidung 15). Die Aufteilung in ES-Module hat das Problem ohne Werkzeugkette gelöst; größte Datei ist jetzt `brain.js` mit 481 Zeilen.
 
 ## 8. Bekannte Stolpersteine
 
@@ -127,6 +130,9 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - **Die Card fordert keine Mindestbreite ein.** `container-type: inline-size` an `:host` impliziert `contain: inline-size`; der Host trägt damit keine intrinsische Breite bei. In einer `horizontal-stack` mit Geschwistern, die feste Breiten setzen, schluckt die Pixel-Card deshalb das gesamte Defizit und kollabiert auf Breite 0 — live gemessen: `hui-card` als Elternelement mit Breite 0, während vier Geschwister mit zusammen 375 px die Zeile füllten. Seit 0.1.3 blendet eine vierte Container-Stufe unterhalb von 44 px die `ha-card` ganz aus, damit kein Stummel stehenbleibt. Wer den Chip sehen will, gibt der Card eine eigene Zeile; wer nur das Tier will, setzt `show_status: false`.
 - **Verstecken ist der gefährlichste Zustand der Card.** `_hide()` clippt das Tier hinter die Kartenkante; einziger Weg heraus war lange nur `_peek()`. In 0.1.2 hat `_covered()` genau den blockiert, weil weggeclippte Fläche nicht hit-testbar ist und `elementFromPoint` die Karte dahinter lieferte — das Tier verschwand dauerhaft. Seit 0.1.3: `_covered()` ignoriert das eigene Versteck, der `hiding`-Zweig steht davor, das Versteck endet nach `HIDE_MAX_SECONDS`, und `HIDE_SINK` lässt den Kopf stehen. Wer am Versteck arbeitet, rechnet die Rig-Geometrie nach: viewBox `-4 -4 24 22` in 64 px sind 2,67 px je Einheit bei 2,67 px Versatz, die Kopfoberkante liegt bei 18,7 px.
 - **Die Idle-Schleife muss jede Exception überleben.** `running` bleibt bei einem Wurf `true`, und `start()` steigt dann sofort wieder aus — ohne `try/catch` im Schleifenkörper wäre das Tier bis zum nächsten View-Wechsel tot.
+- **Der Smoke-Test lädt die Card als echtes Modul.** `window.eval` wertet nach dem Script-Goal aus und bricht an der ersten `import`-Zeile. Stattdessen liegen die jsdom-Globals auf `globalThis`, dann `await import(...)`. Zwei Fallen: `performance` darf **nicht** übernommen werden (jsdoms `Performance.now()` ruft das globale `performance` auf und läuft in eine Endlosrekursion, sobald es selbst das globale ist), und Stubs gehören auf `globalThis`, nicht auf `window` — der Modulcode läuft im Node-Realm und bindet `getComputedStyle` beim Import.
+- **Keine `datetime` in Listenfeldern des `PetState`.** `to_dict` wandelt nur Felder der obersten Ebene nach ISO; ein Zeitstempel innerhalb von `builds` bräche den Roundtrip. Deshalb ist `Build.created` ein ISO-String.
+- **Neue `Activity`-Werte nicht ans Ende hängen.** Der Fallback für unbekannte gespeicherte Werte ist `list(enum_cls)[-1]`. Und die `options`-Liste am `activity`-Sensor muss mitziehen, sonst loggt HA einen ungültigen Enum-Zustand.
 - jsdom-Test stubbt `getBoundingClientRect`; Layout-Fragen (Überlappung, Clip-Optik) und **Farbkontraste** sind damit **nicht** abgedeckt → `docs/card-demo.html` im Browser öffnen (hat seit 0.1.2 einen Hell/Dunkel-Umschalter und eine fixe Leiste am unteren Rand).
 - jsdom kennt weder `document.elementFromPoint` noch `Element.animate`. Beide Stellen (`_bottomBarTop`, `_covered`, `_shake`) haben darum einen Feature-Guard; wer ihn entfernt, bricht den Smoke-Test.
 - Zwei Rig-Instanzen: Overlay-Tier **und** Chip-Tier. Wer am Rig etwas ergänzt, das von außen gesetzt wird (wie `setTheme`), muss beide bedienen – Sammelpunkt ist `PixelCard._applyTheme()`.

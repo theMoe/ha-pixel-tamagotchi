@@ -3,7 +3,6 @@
  * Ausführen: node tests/frontend/card.smoke.test.mjs
  */
 import { JSDOM } from "jsdom";
-import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 
 const html = `<!doctype html><body>
@@ -34,8 +33,21 @@ const errors = [];
 window.addEventListener("error", (e) => errors.push(e.error || e.message));
 process.on("unhandledRejection", (e) => errors.push(e));
 
-// Card-Code laden
-window.eval(readFileSync(new URL("../../custom_components/pixel/frontend/pixel-card.js", import.meta.url), "utf8"));
+// Card-Code laden. Seit 0.1.4 ist die Card in ES-Module aufgeteilt, `window.eval` wertet
+// aber nach dem Script-Goal aus und bricht an der ersten import-Zeile. Deshalb die
+// jsdom-Globals auf globalThis legen und das Einstiegsmodul echt importieren.
+// Reihenfolge ist wichtig: `class PixelCard extends HTMLElement` wird schon beim Auswerten
+// des Moduls gebraucht, HTMLElement muss also vorher stehen.
+for (const name of [
+  "window", "document", "customElements", "HTMLElement", "MouseEvent", "CustomEvent",
+  "Node", "Element", "getComputedStyle", "requestAnimationFrame", "matchMedia",
+]) {
+  globalThis[name] = window[name];
+}
+// performance bewusst NICHT uebernehmen: jsdoms Performance.now() ruft das globale
+// performance auf und geraet in eine Endlosrekursion, sobald es selbst das globale ist.
+// Node bringt ein eigenes mit, und der Mover braucht nur eine monotone Millisekundenuhr.
+await import(new URL("../../custom_components/pixel/frontend/pixel-card.js", import.meta.url).href);
 assert.ok(window.customElements.get("pixel-card"), "Element registriert");
 assert.ok(window.customCards.some((c) => c.type === "pixel-card"), "in customCards eingetragen");
 
@@ -209,6 +221,63 @@ await tick(600);
 assert.equal(card._brain.hiding, null, "aufgescheucht");
 assert.equal(overlay.querySelector(".pixel-pet").style.clipPath, "", "Clip entfernt");
 
+// Gebaute Objekte: anzeigen, platzieren, einzeln antippen
+const bauten = [
+  { id: "b1", kind: "house", rx: 0.2, created: "2026-09-16T10:00:00+00:00" },
+  { id: "b2", kind: "golf", rx: 0.8, created: "2026-09-16T11:00:00+00:00" },
+];
+card.hass = { ...hass, states: { "sensor.pixel_status": { state: "happy", attributes: { ...attrs, builds: bauten } } } };
+await tick(10);
+const objekte = () => [...overlay.querySelectorAll(".pixel-build")];
+assert.equal(objekte().length, 2, "zwei Objekte gerendert");
+assert.equal(card._brain.builds.length, 2, "Brain kennt die Objekte");
+
+// Waagerecht aus dem Backend: rx 0.2 muss links von rx 0.8 liegen.
+const [links, rechts] = objekte().map((e) => parseFloat(e.style.left));
+assert.ok(links < rechts, "rx bestimmt die waagerechte Reihenfolge");
+
+// Senkrecht aus dem eigenen Layout: das Objekt steht auf einer Karte oder dem Boden.
+const objektHoehen = objekte().map((e) => parseFloat(e.style.top));
+const flaechen = [...card._brain.f.climbable().map((c) => c.top), card._brain.f.floorY];
+for (const [i, el] of objekte().entries()) {
+  const unterkante = objektHoehen[i] + parseFloat(el.style.height);
+  assert.ok(flaechen.some((f) => Math.abs(f - unterkante) < 1), "Objekt steht auf einer Flaeche, nicht in der Luft");
+}
+
+// Antippen entfernt genau dieses und ruft den Service mit seiner id.
+objekte()[0].dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+assert.equal(calls.at(-1)[1], "remove_build");
+assert.equal(calls.at(-1)[2].build_id, "b1", "die id des angetippten Objekts");
+assert.equal(objekte().length, 1, "nur das angetippte verschwindet");
+
+// Der Besuch ist eine Datenzeile in der Aktionstabelle, sobald etwas steht.
+card.hass = { ...hass, states: { "sensor.pixel_status": { state: "happy", attributes: { ...attrs, builds: [] } } } };
+await tick(10);
+assert.equal(objekte().length, 0, "ohne Objekte im Snapshot bleibt nichts stehen");
+
+// Verweilen: Ortswechsel muessen deutlich in der Minderheit sein.
+// Frueher bekam der Fallback _walkRandom() ueber die Haelfte aller Ticks, zusammen mit
+// _hide und _kickCard waren 88 Prozent der Ticks ein Ortswechsel.
+const { chooseIdleAction } = await import(
+  new URL("../../custom_components/pixel/frontend/idle.js", import.meta.url).href
+);
+const neutral = { mood: "happy", media_playing: false, weather: "cloudy" };
+const gezogen = Array.from({ length: 4000 }, () => chooseIdleAction(card._brain, neutral, false));
+const wechselAnteil = gezogen.filter((a) => !a.still).length / gezogen.length;
+assert.ok(wechselAnteil < 0.45, `Ortswechsel in der Minderheit (gemessen: ${Math.round(wechselAnteil * 100)} %)`);
+assert.ok(wechselAnteil > 0.15, `aber nicht bewegungslos (gemessen: ${Math.round(wechselAnteil * 100)} %)`);
+
+// Waehrend des Verweilens darf keine Zeile mit Ortswechsel gezogen werden.
+const nurStill = Array.from({ length: 500 }, () => chooseIdleAction(card._brain, neutral, true));
+assert.ok(nurStill.every((a) => a.still), "beim Verweilen nur ortsfeste Aktionen");
+
+// Nach einem Ortswechsel setzt _chooseIdleAction eine Verweilzeit.
+card._brain._dwellUntil = 0;
+card._brain.busy = false;
+while (Date.now() >= card._brain._dwellUntil) await card._brain._chooseIdleAction(neutral);
+assert.ok(card._brain._dwellUntil > Date.now(), "nach einem Ortswechsel wird verweilt");
+card._brain._dwellUntil = 0;
+
 // Watchdog: aus einem festhaengenden Versteck muss recover() herausfuehren
 card._brain.hiding = card._brain.f.byType("calendar");
 card._brain._hidingSince = Date.now() - 1000 * 60 * 60;
@@ -240,15 +309,17 @@ const bar = document.createElement("navbar-card");
 bar.id = "bar";
 rects.bar = [0, 740, 390, 60];
 document.body.appendChild(bar);
-const realComputedStyle = window.getComputedStyle;
-window.getComputedStyle = (el) => (el === bar ? { position: "fixed" } : realComputedStyle(el));
+// Auf globalThis stubben, nicht auf window: der Modulcode laeuft im Node-Realm und
+// greift auf das globale getComputedStyle zu, das beim Import gebunden wurde.
+const realComputedStyle = globalThis.getComputedStyle;
+globalThis.getComputedStyle = (el) => (el === bar ? { position: "fixed" } : realComputedStyle(el));
 document.elementFromPoint = () => bar;
 card._brain.f.scan();
 assert.equal(card._brain.f.floorY, 740 - 12, "Bodenlinie liegt oberhalb der festen Leiste");
 delete document.elementFromPoint;
 card._brain.f.scan();
 assert.equal(card._brain.f.floorY, 800 - 12, "ohne Treffertest bleibt es beim Fensterrand");
-window.getComputedStyle = realComputedStyle;
+globalThis.getComputedStyle = realComputedStyle;
 bar.remove();
 
 // View-Wechsel: solange die alte Karte noch haengt, haelt sie das Tier; danach uebernimmt die neue.

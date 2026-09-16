@@ -101,7 +101,8 @@
           "eating": "Isst",
           "playing": "Spielt",
           "sick": "Krank",
-          "fainted": "Ohnmächtig"
+          "fainted": "Ohnmächtig",
+          "building": "Baut"
         }
       },
       "outfit": {
@@ -112,6 +113,9 @@
       },
       "status": {
         "name": "Status"
+      },
+      "builds": {
+        "name": "Gebautes"
       }
     },
     "binary_sensor": {
@@ -317,6 +321,20 @@
         "name": {
           "name": "Name",
           "description": "Neuer Name (optional)."
+        },
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
+    },
+    "remove_build": {
+      "name": "Objekt abreißen",
+      "description": "Entfernt ein gebautes Objekt.",
+      "fields": {
+        "build_id": {
+          "name": "Objekt",
+          "description": "Welches Objekt entfernt wird. Ohne Angabe das zuletzt gebaute."
         },
         "config_entry_id": {
           "name": "Tier",

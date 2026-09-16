@@ -94,6 +94,22 @@ class PetActions:
         s.happiness = clamp(s.happiness + self._cfg.clean_happiness * removed)
         return [GameEvent("cleaned", {"removed": removed, "left": s.poop_count})]
 
+    def remove_build(self, s: PetState, w: WorldContext, build_id: str | None = None) -> list[GameEvent]:
+        """Ein gebautes Objekt abreißen. Ohne ``build_id`` das zuletzt gebaute.
+
+        Idempotent: eine unbekannte Id ist kein Fehler, sondern ein erklärendes Event -
+        zwei Geräte können dasselbe Objekt gleichzeitig antippen.
+        """
+        s.last_interaction = w.now
+        if not s.builds:
+            return [GameEvent("nothing_to_remove", {})]
+        ziel = next((b for b in s.builds if b.id == build_id), None) if build_id else s.builds[-1]
+        if ziel is None:
+            return [GameEvent("nothing_to_remove", {"id": build_id})]
+        s.builds.remove(ziel)
+        s.happiness = clamp(s.happiness - self._cfg.remove_build_happiness_penalty)
+        return [GameEvent("build_removed", {"id": ziel.id, "kind": ziel.kind, "left": len(s.builds)})]
+
     def medicine(self, s: PetState, w: WorldContext) -> list[GameEvent]:
         cfg = self._cfg
         s.last_interaction = w.now

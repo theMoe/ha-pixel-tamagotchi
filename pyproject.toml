@@ -1,6 +1,6 @@
 [project]
 name = "ha-pixel-tamagotchi"
-version = "0.1.3"
+version = "0.1.4"
 description = "Pixel – ein Tamagotchi, das auf dem Home-Assistant-Dashboard lebt"
 requires-python = ">=3.12"
 
