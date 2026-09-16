@@ -2,6 +2,7 @@
 
 import { HIDE_MAX_SECONDS, HIDE_SINK } from "./const.js";
 import { Texts } from "./texts.js";
+import { BUILD_KINDS } from "./builds.js";
 import { chooseIdleAction } from "./idle.js";
 import { clamp, deepElementFromPoint, pick, reducedMotion, rnd, wait } from "./util.js";
 
@@ -27,6 +28,8 @@ export class Brain {
     this._lastLoopAt = 0; // vom Watchdog gelesen: laeuft die Schleife noch?
     this._freshPoop = false; // naechstes Haeufchen entsteht am Standort des Tieres
     this._dwellUntil = 0; // bis dahin nur ortsfeste Aktionen
+    this.builds = [];
+    this._yard = overlay.attachBuilds((build) => this.callService("remove_build", { build_id: build.id }));
   }
 
   t(key, data) {
@@ -53,6 +56,7 @@ export class Brain {
   }
 
   stop() {
+    this._yard.clear();
     this.running = false;
     this._loopToken++;
     this.m.cancel();
@@ -66,6 +70,7 @@ export class Brain {
     this.m.speed = snap.stress_level >= 2 ? 0.38 : snap.stress_level === 1 ? 0.26 : 0.16;
     this.o.rig.apply(snap, { hidden: !!this.hiding });
     this._syncPoop(snap.poop_count || 0);
+    this._syncBuilds(snap.builds || []);
 
     if (prev && snap.activity !== prev.activity) this._onActivity(snap.activity);
     if (prev && snap.stage !== prev.stage && snap.stage !== "egg") this.o.rig.play("wobble", 800);
@@ -97,6 +102,51 @@ export class Brain {
     return { x: rnd(b.left + 20, Math.max(b.left + 20, b.right - 50)), y: this.f.floorY };
   }
 
+  _syncBuilds(builds) {
+    this.builds = builds;
+    this._yard.sync(builds, (build, art) => this._buildSpot(build, art));
+  }
+
+  /**
+   * Waagerecht kommt aus dem Backend (ueberall gleich), senkrecht aus dem eigenen Layout:
+   * das Objekt stellt sich auf die Karte, die an dieser Stelle liegt, sonst auf den Boden.
+   */
+  _buildSpot(build, art) {
+    const b = this.f.bounds;
+    const x = clamp(b.left + (build.rx ?? 0.5) * (b.right - b.left), b.left + 4, b.right - art.width - 4);
+    const mitte = x + art.width / 2;
+    const traeger = this.f.climbable().filter((c) => mitte >= c.x1 && mitte <= c.x2);
+    const y = traeger.length ? Math.min(...traeger.map((c) => c.top)) : this.f.floorY;
+    return { x, y };
+  }
+
+  /** Geht zu einem gebauten Objekt und beschaeftigt sich damit. */
+  async _visitBuild() {
+    if (!this.builds.length) return this._walkRandom();
+    await this._unhide(false);
+    this.f.scan();
+    const build = pick(this.builds);
+    const ziel = this._yard.spotOf(build);
+    if (!ziel) return this._walkRandom();
+    const art = BUILD_KINDS[build.kind] || BUILD_KINDS.house;
+    const links = Math.random() < 0.5;
+    const x = clamp(
+      links ? ziel.x - this.o.size + 6 : ziel.x + art.width - 6,
+      this.f.bounds.left,
+      this.f.bounds.right - this.o.size,
+    );
+    this.anchor = null;
+    const ok = await this.m.to(x, ziel.y);
+    if (!ok) return undefined;
+    this.o.rig.face(!links);
+    this.o.say(this.t(art.text), 1800);
+    if (build.kind === "golf") {
+      this._yard.putt({ x: this.o.pos.x + this.o.size / 2, y: this.o.pos.y - 10 }, { x: ziel.x + art.width / 2, y: ziel.y - 4 });
+      await this.o.rig.play("wave", 900);
+    }
+    return this._yard.busy(build, 3000);
+  }
+
   _onActivity(activity) {
     if (activity === "eating") this._interrupt(async () => {
       await this._unhide(false);
@@ -119,6 +169,12 @@ export class Brain {
     });
     if (type === "hungry" || type === "feeding_time") this._interrupt(() => this._pointAt("entit", this.t(type)));
     if (type === "appointment_soon") this._interrupt(() => this._pointAt("calendar", this.t("appointment_soon", data), 5000));
+    if (type === "built") {
+      this._interrupt(async () => {
+        this.o.say(this.t("built"), 2000);
+        await this.o.rig.play("wobble", 800);
+      });
+    }
     if (type === "poop") {
       // Das Haeufchen ist gerade erst passiert - es gehoert dorthin, wo das Tier steht.
       this._freshPoop = true;
@@ -266,6 +322,7 @@ export class Brain {
     }
     if (!this.anchor && !this.hiding) this.o.place(clamp(this.o.pos.x, this.f.bounds.left, this.f.bounds.right - this.o.size), this.f.floorY);
     this._syncPoop(this.snap?.poop_count || 0);
+    this._syncBuilds(this.snap?.builds || []);
   }
 
   async _walkRandom() {

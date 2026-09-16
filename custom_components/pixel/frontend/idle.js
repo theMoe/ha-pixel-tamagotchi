@@ -30,6 +30,7 @@ export const IDLE_ACTIONS = [
   { weight: 8, still: true, when: () => !reducedMotion(), run: (b) => b._trick("wave") },
 
   // Ortswechsel - bewusst in der Minderheit.
+  { weight: 16, still: false, when: (b) => b.builds.length > 0, run: (b) => b._visitBuild() },
   { weight: 18, still: false, when: () => true, run: (b) => b._walkRandom() },
   { weight: 8, still: false, when: () => true, run: (b) => b._hide() },
   { weight: 5, still: false, when: () => !reducedMotion(), run: (b) => b._trick("tumble") },

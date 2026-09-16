@@ -1,5 +1,6 @@
 /** Die fixe Ebene ueber dem Dashboard: Tier, Sprechblase, Haeufchen, Menue, Statistik. */
 
+import { BuildYard, BUILDS_CSS } from "./builds.js";
 import { PET_BASE_SIZE } from "./const.js";
 import { RIG_CSS, Rig } from "./rig.js";
 import { clamp, ratio } from "./util.js";
@@ -41,7 +42,7 @@ export class Overlay {
     this.el = document.createElement("div");
     this.el.className = "pixel-overlay";
     const style = document.createElement("style");
-    style.textContent = OVERLAY_CSS + RIG_CSS;
+    style.textContent = OVERLAY_CSS + RIG_CSS + BUILDS_CSS;
     this.el.appendChild(style);
 
     this.petEl = document.createElement("div");
@@ -55,6 +56,7 @@ export class Overlay {
     this.el.appendChild(this.bubbleEl);
 
     this.poops = []; // { el, rx, ry } - Verhaeltnisse statt Pixel
+    this.builds = null; // BuildYard, vom Brain gesetzt (braucht den Service-Aufruf)
     this.menuEl = null;
     this.statsEl = null;
     this.pos = { x: 40, y: 200 };
@@ -157,6 +159,12 @@ export class Overlay {
       p.el.style.left = `${clamp(bounds.left + p.rx * w, bounds.left + 4, bounds.right - 30)}px`;
       p.el.style.top = `${clamp(bounds.top + p.ry * h, bounds.top + 4, bounds.bottom - 30)}px`;
     }
+  }
+
+  /** Legt die Verwaltung der gebauten Objekte an; der Callback braucht den Service. */
+  attachBuilds(onRemove) {
+    this.builds = new BuildYard(this.el, onRemove);
+    return this.builds;
   }
 
   removePoop(entry) {

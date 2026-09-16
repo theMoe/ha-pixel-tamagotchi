@@ -64,6 +64,7 @@
   <label><input type="checkbox" id="anim" checked> animations</label>
   <button id="theme">🌗 hell/dunkel</button>
   <button id="poop">💩 Häufchen +1</button>
+  <select id="buildKind"><option value="">Objekt bauen …</option><option>house</option><option>swing</option><option>flowers</option><option>snowman</option><option>golf</option></select>
 </div>
 
 <script type="module" src="../custom_components/pixel/frontend/pixel-card.js"></script>
@@ -87,7 +88,7 @@
     entry_id: "demo", name: "Pixel", stage: "adult", mood: "happy", activity: "idle",
     outfit: { hat: "", accessory: "sunglasses", item: "" }, hunger: 70, happiness: 75, energy: 85, health: 100,
     sleeping: false, sick: false, fainted: false, poop_count: 0, stress_level: 1, weather: "sunny",
-    media_playing: false, animations_enabled: true, total_feeds: 3, feeds_by_user: { Alex: 2, Sam: 1 }, age_days: 12,
+    media_playing: false, animations_enabled: true, builds: [], total_feeds: 3, feeds_by_user: { Alex: 2, Sam: 1 }, age_days: 12,
   };
   const OUTFITS = { sunny: { accessory: "sunglasses" }, rainy: { item: "umbrella" }, snowy: { hat: "beanie", accessory: "scarf" } };
   function makeHass() {
@@ -104,6 +105,7 @@
         if (service === "play") { status.happiness = Math.min(100, status.happiness + 25); status.activity = "playing"; fire("played"); setTimeout(() => { status.activity = "idle"; push(); }, 3000); }
         if (service === "pet") fire("petted");
         // Bildet das Backend nach: ohne count alles, mit count nur so viele.
+        if (service === "remove_build") { status.builds = (status.builds || []).filter((b) => b.id !== data?.build_id); fire("build_removed"); }
         if (service === "clean") { const n = data?.count ?? status.poop_count; status.poop_count = Math.max(0, status.poop_count - n); fire("cleaned"); }
         push();
       },
@@ -127,6 +129,16 @@
   document.getElementById("theme").onclick = () => { document.documentElement.classList.toggle("light"); push(); };
   // Zum Nachsehen: liegen die Häufchen verstreut, und putzt ein Tippen wirklich nur eines weg?
   document.getElementById("poop").onclick = () => { status.poop_count++; fire("poop"); push(); };
+  // Objekte bauen: dieselbe Struktur, die das Backend im Snapshot liefert.
+  document.getElementById("buildKind").onchange = (ev) => {
+    const kind = ev.target.value;
+    if (!kind) return;
+    ev.target.value = "";
+    const build = { id: String(Date.now()), kind, rx: 0.1 + Math.random() * 0.8, created: new Date().toISOString() };
+    status.builds = [...(status.builds || []), build];
+    fire("built", build);
+    push();
+  };
   document.getElementById("weather").onchange = (e) => { status.weather = e.target.value; status.outfit = { hat: "", accessory: "", item: "", ...OUTFITS[e.target.value] }; push(); };
   document.getElementById("stage").onchange = (e) => { status.stage = e.target.value; push(); };
   document.getElementById("sleep").onchange = (e) => { status.sleeping = e.target.checked; status.outfit = e.target.checked ? { hat: "sleep_cap", accessory: "", item: "" } : { hat: "", accessory: "", item: "", ...OUTFITS[status.weather] }; push(); };
