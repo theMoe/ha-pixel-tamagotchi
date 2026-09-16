@@ -75,7 +75,8 @@ assert.match(chipCss, /:host\s*\{[^}]*display:\s*block/, ":host ist display:bloc
 assert.match(chipCss, /:host\s*\{[^}]*container-type:\s*inline-size/, ":host ist Query-Container");
 assert.match(chipCss, /ha-card\s*\{[^}]*overflow:\s*hidden/, "ha-card schneidet überstehenden Inhalt ab");
 // Gilt nur, solange keine Container-Query ins RIG_CSS wandert: beide teilen sich den <style>.
-assert.equal(chipCss.match(/@container/g).length, 3, "drei Abrüst-Stufen für enge Container");
+assert.equal(chipCss.match(/@container/g).length, 4, "vier Abrüst-Stufen für enge Container");
+assert.match(chipCss, /@container \(max-width: 44px\) \{ ha-card \{ display:none/, "überbuchte Zeile blendet die Karte ganz aus");
 assert.ok(!card.classList.contains("pixel-no-chip"), "Host sichtbar, solange show_status gilt");
 
 // --- Theme: ein Signal, zwei Rigs (Overlay-Tier am body und Chip-Tier im Shadow Root)
@@ -135,9 +136,44 @@ assert.equal(menu.querySelectorAll("button").length, 6, "5 Basis-Aktionen + Putz
 menu.querySelector("button").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 assert.equal(JSON.stringify(calls.at(-1)), JSON.stringify(["pixel", "feed", { meal: "meal", config_entry_id: "x" }]), "feed-Service mit entry_id");
 
-// Häufchen tippen → clean
-overlay.querySelector(".pixel-poop").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+// Häufchen: getrennte Positionen und einzeln wegputzen
+card.hass = { ...hass, states: { "sensor.pixel_status": { state: "happy", attributes: { ...attrs, poop_count: 3 } } } };
+await tick(10);
+const haufen = () => [...overlay.querySelectorAll(".pixel-poop")];
+assert.equal(haufen().length, 3, "drei Häufchen gerendert");
+
+// Frueher lagen alle auf floorY - 26. _poopSpot() streut jetzt ueber Kartenoberkanten und
+// Boden. 40 Ziehungen statt der drei gerenderten, damit der Test nicht vom Zufall abhaengt.
+const hoehen = new Set(Array.from({ length: 40 }, () => card._brain._poopSpot().y));
+assert.ok(hoehen.size > 1, `Häufchen streuen über mehrere Höhen (gesehen: ${[...hoehen]})`);
+
+// Ein frisch passiertes Häufchen gehört dorthin, wo das Tier gerade steht.
+card._brain.o.place(321, 234);
+card._brain._freshPoop = true;
+// Feldweise vergleichen: Objekte aus dem jsdom-Realm haben ein anderes Object.prototype,
+// deepEqual wuerde daran scheitern.
+const frisch = card._brain._poopSpot();
+assert.equal(frisch.x, 321, "frisches Häufchen landet beim Tier (x)");
+assert.equal(frisch.y, 234, "frisches Häufchen landet beim Tier (y)");
+assert.equal(card._brain._freshPoop, false, "das Flag wird dabei verbraucht");
+
+const mitte = haufen()[1];
+mitte.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 assert.equal(calls.at(-1)[1], "clean");
+assert.equal(calls.at(-1)[2].count, 1, "es wird genau eines weggeputzt");
+assert.equal(haufen().length, 2, "nur das angetippte verschwindet");
+assert.ok(!haufen().includes(mitte), "und zwar genau das angetippte");
+
+// Auch der Besen im Menü putzt einzeln
+card.hass = { ...hass, states: { "sensor.pixel_status": { state: "happy", attributes: { ...attrs, poop_count: 2 } } } };
+await tick(10);
+overlay.querySelector(".pixel-pet").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+await tick(10);
+[...overlay.querySelectorAll(".pixel-menu button")].at(-1).dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+assert.equal(JSON.stringify(calls.at(-1)), JSON.stringify(["pixel", "clean", { count: 1, config_entry_id: "x" }]), "Besen putzt eines");
+
+card.hass = { ...hass, states: { "sensor.pixel_status": { state: "happy", attributes: { ...attrs, poop_count: 1 } } } };
+await tick(10);
 
 // Events vom Bus
 await tick(700); // Begrüßung abwarten
@@ -153,10 +189,44 @@ card._brain.busy = false;
 await card._brain._interrupt(() => card._brain._hide(card._brain.f.byType("calendar")));
 assert.ok(card._brain.hiding, "versteckt");
 assert.ok(overlay.querySelector(".pixel-pet").style.clipPath.includes("inset"), "Clip aktiv");
+// Kern der 0.1.2-Regression: _covered() sah den eigenen Clip als fremde Verdeckung und
+// blockierte damit _peek(), den einzigen Weg aus dem Versteck heraus. jsdom kennt
+// elementFromPoint nicht, deshalb wird der Treffertest hier gestubbt - sonst greift
+// schon der Feature-Guard und der Test waere wirkungslos.
+document.elementFromPoint = () => document.querySelector("hui-calendar-card ha-card");
+assert.equal(card._brain._covered(), false, "der eigene Clip zaehlt nicht als Verdeckung");
+const echtesVersteck = card._brain.hiding;
+card._brain.hiding = null;
+assert.equal(card._brain._covered(), true, "eine fremde Karte davor zaehlt sehr wohl");
+card._brain.hiding = echtesVersteck;
+delete document.elementFromPoint;
+// Der Kopf muss ueber der Kartenkante stehen bleiben, sonst ist das Tier faktisch weg.
+const sank = card._brain.hiding.top - card._brain.o.pos.y;
+assert.ok(Math.abs(sank) < card._brain.o.size, "das Tier sinkt nicht komplett hinter die Karte");
+
 document.dispatchEvent(new window.MouseEvent("click", { bubbles: true, clientX: 250, clientY: 120 }));
 await tick(600);
 assert.equal(card._brain.hiding, null, "aufgescheucht");
 assert.equal(overlay.querySelector(".pixel-pet").style.clipPath, "", "Clip entfernt");
+
+// Watchdog: aus einem festhaengenden Versteck muss recover() herausfuehren
+card._brain.hiding = card._brain.f.byType("calendar");
+card._brain._hidingSince = Date.now() - 1000 * 60 * 60;
+card._brain.busy = true;
+card._brain.o.clipBelow(card._brain.hiding.top);
+assert.ok(card._watchdog, "Watchdog laeuft");
+card._watchdog.check();
+assert.equal(card._brain.hiding, null, "Watchdog loest das Versteck");
+assert.equal(card._brain.busy, false, "Watchdog loest die Blockade");
+assert.equal(overlay.querySelector(".pixel-pet").style.clipPath, "", "Watchdog entfernt den Clip");
+
+// Eine Exception im Idle-Schritt darf die Schleife nicht toeten
+const echterSchritt = card._brain._loopStep.bind(card._brain);
+card._brain._loopStep = () => { throw new Error("Testfehler"); };
+card._brain._lastLoopAt = 0;
+await tick(50);
+card._brain._loopStep = echterSchritt;
+assert.ok(card._brain.running, "Schleife laeuft nach einer Exception weiter");
 
 // Zustand ändern: schlafen
 card.hass = { ...hass, states: { "sensor.pixel_status": { state: "sleeping", attributes: { ...attrs, sleeping: true, outfit: { hat: "sleep_cap" } } } } };

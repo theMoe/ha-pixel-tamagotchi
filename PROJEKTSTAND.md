@@ -1,7 +1,7 @@
 # PROJEKTSTAND – Pixel, Dashboard-Tamagotchi für Home Assistant
 
 > Briefing für die nächste Session. Zuerst lesen, dann `README.md` für Nutzersicht, `docs/KONZEPT.md` für die Idee.
-> Stand: 14.09.2026 · Version 0.1.2 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
+> Stand: 16.09.2026 · Version 0.1.3 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
 
 ## 1. Was ist das
 
@@ -59,6 +59,8 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 10. **Wer füttert** kommt aus `call.context.user_id` → `feeds_by_user` (Familienstatistik).
 11. **Theme ausschließlich als Klasse am Rig** (`theme-light`), alle Farbwerte als Custom Properties im `RIG_CSS`/`OVERLAY_CSS`. `resolveTheme(hass)` ist der einzige Erzeuger des Signals (`hass.themes.darkMode`, Fallback `prefers-color-scheme`), `PixelCard._applyTheme()` der einzige Verteiler an die **zwei** Rig-Instanzen (Overlay-Tier am body, Chip-Tier im Shadow Root). Kein `MutationObserver`, kein `matchMedia`-Listener: HA erzeugt beim Theme-Wechsel ein neues `hass`-Objekt. **Kein `theme:`-Konfigurationsschlüssel** – bewusst verworfen, um die Konfigurationsfläche klein zu halten. Preis: läuft ein dunkler Vollbild-Bildschirmschoner über einem hellen Theme, passt der Farbsatz nicht; praktisch entschärft, weil das Tier unter einer Verdeckung ohnehin pausiert.
 12. **Kontur als SVG-Stroke, ausdrücklich kein CSS-Filter.** Die Sichtbarkeit des Eis im hellen Theme kommt aus einem zweiten Pfad mit `stroke-width:2` auf derselben Silhouette (`EGG_PATH`, einmal definiert, zweimal eingesetzt); die innere Hälfte verdeckt der Füllpfad, es bleibt eine pixelgenaue Kontur von einer Einheit. Eine Kontur über vier gestapelte `drop-shadow()` wurde verworfen: vier Offscreen-Filterdurchläufe **pro Repaint** bei einem Tier, das im 8-fps-Takt und pro rAF-Frame neu zeichnet, bricht auf einem Pi-4-Kiosk die Framerate – und ein 1-px-Filterschatten liegt nicht auf dem Pixelraster des Rigs (2,67 px je SVG-Einheit), `shape-rendering:crispEdges` gilt für Filter nicht.
+13. **Selbstheilung statt Konfiguration.** `Brain.recover()` ist der einzige Ort, der die internen Felder des Gehirns zurücksetzt; `Watchdog` erkennt nur und repariert nichts selbst. Der Besitzerwechsel bleibt bei der Card, weil ihr der Lebenszyklus gehört. Kein Konfigurationsschlüssel dafür — die Konfigurationsfläche bleibt klein (siehe 11).
+14. **Häufchen-Positionen bleiben clientseitig**, als Verhältnis zur Bounds-Box gespeichert. Konsequenz: auf zwei Geräten liegen sie an verschiedenen Stellen, und putzt Gerät A eines weg, verschwindet auf Gerät B irgendeines. Identische Positionen gäbe es nur mit Häufchen-Identität im `PetState`; das gehört zum Positions-Sync im Backlog und wäre hier überzogen.
 
 ## 4. Konventionen
 
@@ -74,7 +76,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 
 | Bereich | Status |
 |---|---|
-| Engine | 34 Tests grün. Balancing plausibel, aber **nicht im Alltag erprobt** (Zahlen ggf. nach 1–2 Wochen nachjustieren). |
+| Engine | 37 Tests grün. Balancing plausibel, aber **nicht im Alltag erprobt** (Zahlen ggf. nach 1–2 Wochen nachjustieren). |
 | Integration | 10 Tests grün gegen **HA 2026.9.0 und 2026.8.3 (Python 3.14)** sowie 2025.1.4 (Python 3.12); keine Deprecation-Hinweise zu `custom_components.pixel`. Ruff sauber unter 3.14. **Nicht auf einer Live-Instanz gestartet.** |
 | Config-Flow | Programmatisch geprüft (Import, Schema). UI-Durchlauf nicht getestet. |
 | Card | jsdom-Smoke-Test grün, `node --check` sauber, Demo-Seite vorhanden. **Im echten HA-Frontend noch nie gelaufen**, aber gegen ein reales Dashboard-YAML (Sections-View, fixe Navigations-Card, Wallpanel-Kiosk, durchweg Custom Cards) durchgesehen – die Befunde daraus sind in 0.1.2 eingearbeitet. **Die Farbwerte des hellen Themes sind rechnerisch gewählt und noch nicht im Browser beurteilt** → `docs/card-demo.html` öffnen, Umschalter „hell/dunkel“ × Stufe „egg“. Verbleibendes Restrisiko: Touch-Verhalten auf dem Pi-Kiosk, Erkennung ungewöhnlicher fixer Leisten, `position: fixed` des Overlays, falls Wallpanel `transform`/`filter` auf `body` setzt (das würde die Koordinaten verschieben). |
@@ -94,12 +96,12 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 ## 7. Backlog (priorisiert)
 
 **P1 – nach erstem Live-Test wahrscheinlich nötig**
-- **Sichtprüfung des hellen Themes im Browser** (`docs/card-demo.html`): Kontur und Farbwerte von Ei und Senior beurteilen, ggf. nachjustieren. Braucht der Körper ebenfalls eine Kontur, ist die Technik dieselbe (`BODY_PATH` + `.body-outline`, analog zu `EGG_PATH`).
 - Card-Feinschliff aus Live-Feedback (Scan-Robustheit, z-index, Touch).
 - Balancing-Justage nach realer Nutzung (Tempo, Fütterungsfenster, Häufchen-Frequenz).
 - Visueller Editor für die Card (`getConfigElement`) – aktuell nur YAML/Karten-Picker mit Stub.
 
 **P2 – Konzept-Features noch offen**
+- **Das Tier baut kleine Objekte** (Häuschen, Zaun), die sich per Tipp wieder entfernen lassen. Die Kette steht, damit die nächste Session nicht neu recherchieren muss: `PetState.builds: list[Build]` mit `field(default_factory=list)` → Zweig in `_deserialize_field` analog zum vorhandenen `outfit`-Zweig → **keine `datetime` innerhalb der Liste**, weil `to_dict` nur Felder der obersten Ebene nach ISO wandelt → eine Zeile in `snapshot()`, danach landet es über `attributes_fn=lambda s: dict(s)` automatisch im Status-Sensor → `BuildRule` neben `PoopRule` plus Eintrag in `default_rules()` → Aktion `remove_build(build_id)` (Vorbild `clean`) → `ServiceSpec` + `services.yaml` + drei Übersetzungsdateien → in der Card ein `syncBuilds()` nach Vorbild der Häufchen plus Zweig in `Brain.onEvent` → Texte in `Texts.de`/`en` → Events-Liste in README §8. Store-Migration ist nicht nötig, `from_dict` ignoriert unbekannte und ergänzt fehlende Felder. **Zwei Entscheidungen fallen dabei an:** sollen die Objekte auf allen Geräten an derselben Stelle stehen, muss die Position ins Backend-Feld (anders als bei den Häufchen) — und die Card hat mit 1525 Zeilen die 1500-Zeilen-Grenze bereits überschritten, die Entscheidung über den Build-Schritt steht also ohnehin an (siehe P3).
 - Positions-Sync über mehrere Clients (Backend-Entity `position`, Card interpoliert).
 - Weitere Tricks aus dem Konzept: Sensorziffern „stehlen“, Seifenblasen, Kreide-Smiley, Angeln, Schaukeln, Schlafwandeln.
 - Weitere Trigger: Fenster offen bei Kälte (Schal, zeigt auf Fenster-Kachel), Luftqualität (Maske), Batterie leer (trägt Batterie), Müllabfuhr-Kalender, PV-Überschuss.
@@ -113,7 +115,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - Diagnostics-Plattform (`diagnostics.py`) für Support.
 - Repairs-Issue, wenn Wetter-/Kalender-Entity fehlt.
 - GitHub Actions: pytest, ruff, hassfest, HACS-Validation.
-- Card in TypeScript/Lit mit Build – nur wenn die Datei > ~1500 Zeilen wird.
+- Card in TypeScript/Lit mit Build – die Schwelle von ~1500 Zeilen ist seit 0.1.3 erreicht (1525). Vor dem nächsten größeren Card-Feature entscheiden: Build-Schritt einführen oder die Datei bewusst in mehrere ES-Module aufteilen, die `frontend.py` einzeln ausliefert.
 
 ## 8. Bekannte Stolpersteine
 
@@ -122,6 +124,9 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - `calendar.get_events` liefert `uid` nicht bei allen Kalender-Integrationen; Fallback-UID = entity+title+start.
 - `zone.home` zählt nur `person.*` mit Tracker. Ohne Tracker → `persons_home` None → Einsamkeits-/Heimkehr-Logik inaktiv (gewollt).
 - Tests: `pytest-homeassistant-custom-component` muss zur HA-Version passen (0.13.363 ↔ 2026.9.0, 0.13.357 ↔ 2026.8.3, 0.13.205 ↔ 2025.1.4; siehe `requirements_test.txt`). HA 2026.x braucht **Python ≥ 3.14.2** – am einfachsten `uv python install 3.14` + `uv venv`. `home-assistant-frontend` (Version aus dem `frontend`-Manifest) wird für die Abhängigkeit im Test benötigt.
+- **Die Card fordert keine Mindestbreite ein.** `container-type: inline-size` an `:host` impliziert `contain: inline-size`; der Host trägt damit keine intrinsische Breite bei. In einer `horizontal-stack` mit Geschwistern, die feste Breiten setzen, schluckt die Pixel-Card deshalb das gesamte Defizit und kollabiert auf Breite 0 — live gemessen: `hui-card` als Elternelement mit Breite 0, während vier Geschwister mit zusammen 375 px die Zeile füllten. Seit 0.1.3 blendet eine vierte Container-Stufe unterhalb von 44 px die `ha-card` ganz aus, damit kein Stummel stehenbleibt. Wer den Chip sehen will, gibt der Card eine eigene Zeile; wer nur das Tier will, setzt `show_status: false`.
+- **Verstecken ist der gefährlichste Zustand der Card.** `_hide()` clippt das Tier hinter die Kartenkante; einziger Weg heraus war lange nur `_peek()`. In 0.1.2 hat `_covered()` genau den blockiert, weil weggeclippte Fläche nicht hit-testbar ist und `elementFromPoint` die Karte dahinter lieferte — das Tier verschwand dauerhaft. Seit 0.1.3: `_covered()` ignoriert das eigene Versteck, der `hiding`-Zweig steht davor, das Versteck endet nach `HIDE_MAX_SECONDS`, und `HIDE_SINK` lässt den Kopf stehen. Wer am Versteck arbeitet, rechnet die Rig-Geometrie nach: viewBox `-4 -4 24 22` in 64 px sind 2,67 px je Einheit bei 2,67 px Versatz, die Kopfoberkante liegt bei 18,7 px.
+- **Die Idle-Schleife muss jede Exception überleben.** `running` bleibt bei einem Wurf `true`, und `start()` steigt dann sofort wieder aus — ohne `try/catch` im Schleifenkörper wäre das Tier bis zum nächsten View-Wechsel tot.
 - jsdom-Test stubbt `getBoundingClientRect`; Layout-Fragen (Überlappung, Clip-Optik) und **Farbkontraste** sind damit **nicht** abgedeckt → `docs/card-demo.html` im Browser öffnen (hat seit 0.1.2 einen Hell/Dunkel-Umschalter und eine fixe Leiste am unteren Rand).
 - jsdom kennt weder `document.elementFromPoint` noch `Element.animate`. Beide Stellen (`_bottomBarTop`, `_covered`, `_shake`) haben darum einen Feature-Guard; wer ihn entfernt, bricht den Smoke-Test.
 - Zwei Rig-Instanzen: Overlay-Tier **und** Chip-Tier. Wer am Rig etwas ergänzt, das von außen gesetzt wird (wie `setTheme`), muss beide bedienen – Sammelpunkt ist `PixelCard._applyTheme()`.

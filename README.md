@@ -80,6 +80,8 @@ Die Card muss **einmal** in der View liegen, auf der Pixel leben soll. Sie zeigt
 
 **Mehrere Views:** Pixel lebt einmal pro Seite. Soll es beim Wechsel zwischen mehreren Views mitwandern, gehört auf jede View eine `pixel-card` – auf den Nebenviews am besten mit `show_status: false`. Die neu erscheinende Karte übernimmt das Tier dabei automatisch von der verschwindenden.
 
+**Mehrere Geräte gleichzeitig:** Funktioniert ohne Zutun. Der Spielzustand liegt im Backend, deshalb zeigen Wandtablet, Handy und Desktop dasselbe Tier mit denselben Werten, und eine Fütterung am einen Gerät ist sofort überall sichtbar. Die Feinbewegung macht dagegen jede Card selbst: Position, Laufwege, gewählte Idle-Aktion, Sprechblasentexte und die Lage der Häufchen sind pro Gerät verschieden. `pixel.say` und `pixel.trick` erreichen alle Geräte gleichzeitig, wobei `trick: random` je Gerät anders ausfallen kann.
+
 **Feste Navigations- oder Fußleisten:** Liegt am unteren Bildschirmrand eine fixierte Leiste (etwa eine Navigations-Card im Kiosk-Betrieb), erkennt Pixel sie und setzt seine Bodenlinie darüber, statt über den Schaltflächen zu laufen. Greift das bei einer ungewöhnlichen Leiste nicht, hilft ein größeres `floor_margin` (siehe [Abschnitt 10](#10-card-optionen)).
 
 Karten lassen sich gezielt beeinflussen (Attribut am Karten-Element, z. B. über `card-mod` oder eigene Custom Cards):
@@ -91,6 +93,7 @@ Karten lassen sich gezielt beeinflussen (Attribut am Karten-Element, z. B. über
 
 | Aktion | Wirkung |
 |---|---|
+| **Tippen** auf ein Häufchen | Räumt genau dieses weg. Der Besen im Menü ebenfalls eines pro Tipp. |
 | **Tippen** auf Pixel | Menü: Füttern 🍎, Snack 🍪, Leckerli 🍬, Spielen ⚽, Streicheln ✋ – plus Putzen 🧹 / Medizin 💊, wenn nötig |
 | **Lange drücken** | Statistik: Werte, Alter, Stufe, Fütterungen (wer hat am meisten gefüttert) |
 | **Tippen** auf die Karte, hinter der Pixel steckt | Pixel springt mit „BUH!“ heraus |
@@ -128,7 +131,7 @@ Alle Services akzeptieren optional `config_entry_id`, falls mehrere Tiere existi
 | `pixel.feed` | `meal`: snack / meal / treat | Füttern (+15 / +35 / +10 Sättigung; Leckerli +15 Laune, max. 3 pro Tag) |
 | `pixel.play` | – | +25 Laune, −8 Energie (unter 20 Energie: zu müde) |
 | `pixel.pet` | – | +5 Laune |
-| `pixel.clean` | – | Häufchen entfernen |
+| `pixel.clean` | `count` (optional) | Häufchen entfernen; ohne `count` alle, sonst so viele |
 | `pixel.medicine` | – | Heilt bei Krankheit/Ohnmacht, sonst „bäh“ |
 | `pixel.sleep` / `pixel.wake` | – | Manuell schlafen legen / wecken |
 | `pixel.set_mood` | `mood`, `minutes` | Stimmung zeitweise erzwingen, `auto` hebt auf |
@@ -236,6 +239,8 @@ Die Card respektiert `prefers-reduced-motion` (keine Purzelbäume) und pausiert,
 
 **Custom Cards:** `avoid` und `favorites` vergleichen Teilstrings des Kartentyps. Der Typ ist der Elementname ohne `hui-`-Präfix und `-card`-Suffix – aus `hui-calendar-card` wird `calendar`, aus einer Custom Card `<name>-card` wird `<name>`. Wer wissen will, wie die eigenen Karten heißen, findet die Elementnamen in der Browser-Konsole (F12) über die Elementansicht. Einzelne Karten lassen sich zusätzlich mit `data-pixel="favorite"` bzw. `data-pixel="noclimb"` auszeichnen (siehe [Abschnitt 5](#5-card-ins-dashboard-legen)).
 
+**Wenn die Zeile zu voll ist:** Die Card fordert keine Mindestbreite ein. Stehen in derselben `horizontal-stack` Karten mit fest gesetzter Breite, die die Zeile bereits ausfüllen, bleibt für Pixel nichts übrig und die Karte wird gar nicht mehr dargestellt. Dann entweder `show_status: false` setzen (das Tier auf dem Dashboard bleibt davon unberührt) oder der Card eine eigene Zeile geben.
+
 **Status-Chip in engen Containern:** In `horizontal-stack` oder `custom:stack-in-card` bekommt jede Karte per `flex: 1 1 0` nur einen gleichen Anteil der Zeile. Der Chip rüstet dann stufenweise ab – erst fallen die drei Balken weg, dann Name und Stimmung, zuletzt bleibt nur das Tier. Wer den vollen Chip sehen will, gibt der Card eine eigene Zeile oder in der Sections-View eigene `grid_options`. Geht es ohnehin nur um das Tier auf dem Dashboard, ist `show_status: false` die sauberste Lösung – dann verschwindet die Karte vollständig aus dem Layout.
 
 ## 11. Spielregeln
@@ -262,6 +267,7 @@ Alle Zahlen stehen in `custom_components/pixel/engine/config.py`.
 | Mehrere Pixel gleichzeitig | Auf einer Seite läuft immer nur ein Tier – die erste Card gewinnt. Weitere Cards zeigen nur ihren Status-Chip. |
 | Pixel ist im hellen Theme kaum zu sehen | Ab 0.1.2 passt sich die Card dem Theme an. Bleibt es blass: Browser hart neu laden, damit die neue Card-Version geladen wird. |
 | Pixel verschwindet nach einem Wechsel der View | Ab 0.1.2 behoben. Vorher half nur Neuladen. Prüfen, ob die geladene Card-Version aktuell ist (`/pixel-static/pixel-card.js?v=…`). |
+| Pixel ist verschwunden und kommt nicht wieder | Bis 0.1.2 blieb das Tier hinter einer Karte hängen. Ab 0.1.3 behoben; ein Wächter holt es zusätzlich alle 20 s zurück, falls es doch festhängt. Prüfen, ob die geladene Card-Version aktuell ist. |
 | Pixel läuft über der Navigationsleiste | Sollte automatisch erkannt werden; sonst `floor_margin` auf die Höhe der Leiste setzen. |
 | Kalender wird ignoriert | Die Integration nutzt `calendar.get_events`; die Kalender-Integration muss diese Aktion unterstützen (Google, CalDAV, lokale Kalender: ja). |
 | Entity-IDs lauten anders | Die IDs folgen dem englischen Entity-Namen; bei anderem Tiernamen ändert sich das Präfix (`sensor.blob_status`). |

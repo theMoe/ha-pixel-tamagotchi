@@ -16,6 +16,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import (
     ATTR_CONFIG_ENTRY,
+    ATTR_COUNT,
     ATTR_DURATION,
     ATTR_MEAL,
     ATTR_MINUTES,
@@ -86,7 +87,11 @@ def _table() -> list[ServiceSpec]:
         ),
         ServiceSpec(SERVICE_PLAY, vol.Schema(_BASE), _play),
         ServiceSpec(SERVICE_PET, vol.Schema(_BASE), _make_simple("pet")),
-        ServiceSpec(SERVICE_CLEAN, vol.Schema(_BASE), _make_simple("clean")),
+        ServiceSpec(
+            SERVICE_CLEAN,
+            vol.Schema({**_BASE, vol.Optional(ATTR_COUNT): vol.All(vol.Coerce(int), vol.Range(min=1))}),
+            _clean,
+        ),
         ServiceSpec(SERVICE_MEDICINE, vol.Schema(_BASE), _make_simple("medicine")),
         ServiceSpec(SERVICE_SLEEP, vol.Schema(_BASE), _make_simple("sleep")),
         ServiceSpec(SERVICE_WAKE, vol.Schema(_BASE), _make_simple("wake")),
@@ -117,6 +122,11 @@ def _table() -> list[ServiceSpec]:
         ),
         ServiceSpec(SERVICE_RESET, vol.Schema({**_BASE, vol.Optional(ATTR_NAME): cv.string}), _reset),
     ]
+
+
+async def _clean(c: PixelCoordinator, call: ServiceCall) -> None:
+    """Ohne ``count`` bleibt es beim bisherigen Verhalten: alles auf einmal."""
+    await c.async_act("clean", count=call.data.get(ATTR_COUNT))
 
 
 def _make_simple(action: str) -> Handler:

@@ -17,6 +17,13 @@ const CARD_TAG = "pixel-card";
 const DOMAIN = "pixel";
 const EVENT_TYPE = "pixel_event";
 const PET_BASE_SIZE = 64;
+// Wie tief das Tier beim Verstecken hinter die Kartenkante sinkt, als Anteil seiner Groesse.
+// Das Rig zeichnet in viewBox "-4 -4 24 22", also 2,67 px je Einheit bei 2,67 px Versatz:
+// die Kopfoberkante liegt bei 18,7 px. Bei 0.6 bleiben 25,6 px sichtbar, der Kopf lugt also
+// ueber die Kante. Der fruehere Wert 0.8 liess nur 12,8 px stehen - da war nichts mehr zu sehen.
+const HIDE_SINK = 0.6;
+const HIDE_MAX_SECONDS = 90; // danach kommt das Tier von selbst wieder hervor
+const WATCHDOG_INTERVAL_MS = 20000;
 
 const DEFAULT_CONFIG = {
   entity: null,
@@ -126,6 +133,8 @@ const Texts = {
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+/** Anteil von ``v`` in der Spanne lo..hi, auf 0..1 begrenzt. Umkehrung: lo + r * (hi - lo). */
+const ratio = (v, lo, hi) => (hi - lo > 0 ? clamp((v - lo) / (hi - lo), 0, 1) : 0);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
@@ -507,7 +516,7 @@ class Overlay {
     this.bubbleEl.className = "pixel-bubble";
     this.el.appendChild(this.bubbleEl);
 
-    this.poopEls = [];
+    this.poops = []; // { el, rx, ry } - Verhaeltnisse statt Pixel
     this.menuEl = null;
     this.statsEl = null;
     this.pos = { x: 40, y: 200 };
@@ -571,23 +580,51 @@ class Overlay {
     setTimeout(() => e.remove(), 1300);
   }
 
-  /* Häufchen als tappbare Elemente auf der Bodenlinie */
-  syncPoop(count, floorY, bounds, onClean) {
-    while (this.poopEls.length > count) this.poopEls.pop().remove();
-    while (this.poopEls.length < count) {
-      const p = document.createElement("div");
-      p.className = "pixel-poop";
-      p.textContent = "💩";
-      p.title = "clean";
-      p.style.left = `${rnd(bounds.left + 20, bounds.right - 50)}px`;
-      p.addEventListener("click", (ev) => {
+  /**
+   * Haeufchen als einzeln tappbare Elemente. Gespeichert wird das Verhaeltnis zur Bounds-Box,
+   * nicht die Pixelposition: so wandern sie bei Resize und Scroll korrekt mit, statt neu
+   * gewuerfelt zu werden oder auf einer Linie zu kleben.
+   * ``spawn()`` liefert den Ort fuer ein neu hinzugekommenes Haeufchen.
+   */
+  syncPoop(count, bounds, onClean, spawn) {
+    while (this.poops.length > count) this.poops.pop().el.remove();
+    while (this.poops.length < count) {
+      const { x, y } = spawn();
+      const entry = {
+        el: document.createElement("div"),
+        rx: ratio(x, bounds.left, bounds.right),
+        ry: ratio(y, bounds.top, bounds.bottom),
+      };
+      entry.el.className = "pixel-poop";
+      entry.el.textContent = "💩";
+      entry.el.title = "clean";
+      entry.el.addEventListener("click", (ev) => {
         ev.stopPropagation();
+        // Sofort lokal entfernen, damit genau das angetippte verschwindet und nicht
+        // irgendeines, wenn der neue Zaehler aus dem Backend eintrifft.
+        this.removePoop(entry);
         onClean();
       });
-      this.el.appendChild(p);
-      this.poopEls.push(p);
+      this.el.appendChild(entry.el);
+      this.poops.push(entry);
     }
-    this.poopEls.forEach((p) => (p.style.top = `${floorY - 26}px`));
+    this.placePoop(bounds);
+  }
+
+  /** Rechnet die gespeicherten Verhaeltnisse in die aktuelle Bounds-Box um. */
+  placePoop(bounds) {
+    const w = bounds.right - bounds.left;
+    const h = bounds.bottom - bounds.top;
+    for (const p of this.poops) {
+      p.el.style.left = `${clamp(bounds.left + p.rx * w, bounds.left + 4, bounds.right - 30)}px`;
+      p.el.style.top = `${clamp(bounds.top + p.ry * h, bounds.top + 4, bounds.bottom - 30)}px`;
+    }
+  }
+
+  removePoop(entry) {
+    const i = this.poops.indexOf(entry);
+    if (i < 0) return;
+    this.poops.splice(i, 1)[0].el.remove();
   }
 
   /* Aktionsmenü beim Tippen */
@@ -720,6 +757,10 @@ class Brain {
     this._lastActivity = null;
     this._lastMood = null;
     this._lastStage = null;
+    this._hidingSince = 0; // Zeitstempel, damit das Versteck nicht ewig dauert
+    this._busySince = 0;
+    this._lastLoopAt = 0; // vom Watchdog gelesen: laeuft die Schleife noch?
+    this._freshPoop = false; // naechstes Haeufchen entsteht am Standort des Tieres
   }
 
   t(key, data) {
@@ -758,12 +799,36 @@ class Brain {
     this.snap = snap;
     this.m.speed = snap.stress_level >= 2 ? 0.38 : snap.stress_level === 1 ? 0.26 : 0.16;
     this.o.rig.apply(snap, { hidden: !!this.hiding });
-    this.o.syncPoop(snap.poop_count || 0, this.f.floorY, this.f.bounds, () => this.callService("clean"));
+    this._syncPoop(snap.poop_count || 0);
 
     if (prev && snap.activity !== prev.activity) this._onActivity(snap.activity);
     if (prev && snap.stage !== prev.stage && snap.stage !== "egg") this.o.rig.play("wobble", 800);
     if (snap.sleeping && !prev?.sleeping) this._goToSleepSpot();
     if (snap.animations_enabled === false) this.m.cancel();
+  }
+
+  /** Einziger Aufrufer von syncPoop: Anzahl aus dem Backend, Ort aus der Card. */
+  _syncPoop(count) {
+    this.o.syncPoop(count, this.f.bounds, () => this.callService("clean", { count: 1 }), () => this._poopSpot());
+  }
+
+  /**
+   * Wo ein neues Haeufchen landet. Frisch passiert heisst: dort, wo das Tier gerade steht -
+   * auch oben auf einer Karte. Alles, was beim Laden der Seite schon da war, wird ueber
+   * Kartenoberkanten und Boden verstreut, damit nicht alles auf einer Linie liegt.
+   */
+  _poopSpot() {
+    if (this._freshPoop) {
+      this._freshPoop = false;
+      return { x: this.o.pos.x, y: this.o.pos.y };
+    }
+    const cards = this.f.climbable();
+    const b = this.f.bounds;
+    if (cards.length && Math.random() < 0.7) {
+      const c = pick(cards);
+      return { x: rnd(c.x1 + 8, Math.max(c.x1 + 8, c.x2 - 30)), y: c.top };
+    }
+    return { x: rnd(b.left + 20, Math.max(b.left + 20, b.right - 50)), y: this.f.floorY };
   }
 
   _onActivity(activity) {
@@ -788,7 +853,11 @@ class Brain {
     });
     if (type === "hungry" || type === "feeding_time") this._interrupt(() => this._pointAt("entit", this.t(type)));
     if (type === "appointment_soon") this._interrupt(() => this._pointAt("calendar", this.t("appointment_soon", data), 5000));
-    if (type === "poop") this._interrupt(async () => this.o.say(this.t("poop_hint"), 1500));
+    if (type === "poop") {
+      // Das Haeufchen ist gerade erst passiert - es gehoert dorthin, wo das Tier steht.
+      this._freshPoop = true;
+      this._interrupt(async () => this.o.say(this.t("poop_hint"), 1500));
+    }
     if (type === "say") this._interrupt(async () => {
       await this._unhide(false);
       this.o.say(String(data.text || ""), (data.duration || 4) * 1000);
@@ -805,6 +874,7 @@ class Brain {
    * `update()` laeuft weiter, damit das Tier nach dem Aufwachen sofort richtig aussieht.
    */
   _covered() {
+    if (this.hiding) return false; // selbst geclippt ist keine fremde Verdeckung
     if (!document.elementFromPoint) return false;
     const x = Math.round(this.o.pos.x + this.o.size / 2);
     const y = Math.round(this.o.pos.y - this.o.size / 2);
@@ -817,26 +887,39 @@ class Brain {
     while (this.running && token === this._loopToken) {
       await wait(rnd(this.config.idle_min_seconds, this.config.idle_max_seconds) * 1000);
       if (!this.running || token !== this._loopToken) return;
-      if (this.busy || !this.snap || document.visibilityState === "hidden") continue;
-      if (this.snap.animations_enabled === false) continue;
-      if (this._covered()) continue; // Bildschirmschoner oder Dialog davor: nichts zu sehen, nichts zu tun
-
-      const s = this.snap;
-      if (s.fainted) continue;
-      if (s.sleeping) {
-        if (Math.random() < 0.6) this.o.fx("zzz", "z", 30);
-        continue;
+      this._lastLoopAt = Date.now();
+      // Ohne diesen Schutz beendet eine einzige Exception die Schleife endgueltig:
+      // `running` bliebe true, und `start()` stiege sofort wieder aus.
+      try {
+        await this._loopStep();
+      } catch (err) {
+        console.warn("[pixel-card] Idle-Schritt fehlgeschlagen", err);
       }
-      if (this.hiding) {
-        await this._peek();
-        continue;
-      }
-      if (s.stage === "egg") {
-        if (Math.random() < 0.5) await this.o.rig.play("wobble", 800);
-        continue;
-      }
-      await this._chooseIdleAction(s);
     }
+  }
+
+  async _loopStep() {
+    if (this.busy || !this.snap || document.visibilityState === "hidden") return;
+    if (this.snap.animations_enabled === false) return;
+
+    const s = this.snap;
+    if (s.fainted) return;
+    if (s.sleeping) {
+      if (Math.random() < 0.6) this.o.fx("zzz", "z", 30);
+      return;
+    }
+    // Vor der Verdeckungspruefung: im Versteck ist das Tier absichtlich geclippt,
+    // und nur `_peek()` holt es dort wieder hervor.
+    if (this.hiding) {
+      if (Date.now() - this._hidingSince > HIDE_MAX_SECONDS * 1000) return this._unhide(false);
+      return this._peek();
+    }
+    if (this._covered()) return; // Bildschirmschoner oder Dialog davor: nichts zu sehen, nichts zu tun
+    if (s.stage === "egg") {
+      if (Math.random() < 0.5) await this.o.rig.play("wobble", 800);
+      return;
+    }
+    await this._chooseIdleAction(s);
   }
 
   async _chooseIdleAction(s) {
@@ -861,12 +944,32 @@ class Brain {
   async _interrupt(fn) {
     if (this.busy) return;
     this.busy = true;
+    this._busySince = Date.now();
     this.m.cancel();
     try {
       await fn();
     } finally {
       this.busy = false;
     }
+  }
+
+  /**
+   * Holt das Tier aus jedem Zustand zurueck, aus dem es allein nicht mehr herausfindet.
+   * Einziger Ort, der dafuer die internen Felder anfassen darf; der Watchdog erkennt nur.
+   */
+  recover(reason) {
+    console.warn(`[pixel-card] Tier wird zurueckgeholt (${reason})`);
+    this.hiding = null;
+    this.anchor = null;
+    this.busy = false;
+    this.m.cancel();
+    this.o.clipBelow(null);
+    if (this.snap) this.o.rig.apply(this.snap, { hidden: false });
+    this.f.scan();
+    const x = clamp(this.o.pos.x, this.f.bounds.left, Math.max(this.f.bounds.left, this.f.bounds.right - this.o.size));
+    this.o.place(x, this.f.floorY);
+    if (!this.running) this.start();
+    else this._loop(++this._loopToken); // alte Schleife abhaengen, frische starten
   }
 
   _rescan() {
@@ -882,7 +985,7 @@ class Brain {
       else this._unhide(false);
     }
     if (!this.anchor && !this.hiding) this.o.place(clamp(this.o.pos.x, this.f.bounds.left, this.f.bounds.right - this.o.size), this.f.floorY);
-    this.o.syncPoop(this.snap?.poop_count || 0, this.f.floorY, this.f.bounds, () => this.callService("clean"));
+    this._syncPoop(this.snap?.poop_count || 0);
   }
 
   async _walkRandom() {
@@ -910,9 +1013,10 @@ class Brain {
     const ok = await this.m.to(c.x1 + offsetX, c.top);
     if (!ok) return;
     this.hiding = c;
+    this._hidingSince = Date.now();
     this.o.rig.apply(this.snap, { hidden: true });
     const clip = () => this.o.clipBelow(c.top);
-    await this.m.to(this.o.pos.x, c.top + this.o.size * 0.8, { dur: 400, hop: 0, keepFacing: true, onFrame: clip });
+    await this.m.to(this.o.pos.x, c.top + this.o.size * HIDE_SINK, { dur: 400, hop: 0, keepFacing: true, onFrame: clip });
     clip();
     this.o.say(this.t("hide"), 1500);
   }
@@ -1039,6 +1143,54 @@ class Brain {
   }
 }
 
+/* ------------------------------------------------------------------ Watchdog */
+
+/**
+ * Erkennt Zustaende, aus denen das Tier allein nicht mehr herausfindet, und meldet sie.
+ * Bewusst ohne eigene Reparatur: das Gehirn repariert sich selbst (`Brain.recover`), der
+ * Besitzerwechsel gehoert der Card. Laeuft selten und ohne Karten-Scan.
+ */
+class Watchdog {
+  constructor({ overlay, brain, onOverlayLost }) {
+    this.o = overlay;
+    this.b = brain;
+    this.onOverlayLost = onOverlayLost;
+    this._timer = null;
+  }
+
+  start() {
+    this._timer = setInterval(() => this.check(), WATCHDOG_INTERVAL_MS);
+  }
+
+  stop() {
+    clearInterval(this._timer);
+    this._timer = null;
+  }
+
+  check() {
+    if (!this.o.el.isConnected) return this.onOverlayLost();
+
+    const reason = this._defect();
+    if (reason) this.b.recover(reason);
+  }
+
+  /** Gibt den Grund zurueck, warum das Tier festhaengt - oder null, wenn alles in Ordnung ist. */
+  _defect() {
+    const now = Date.now();
+    const b = this.b;
+    if (!this.o.petEl.style.width) return "unplaced";
+    if (this.o.petEl.style.clipPath && !b.hiding) return "stale-clip";
+    if (b.hiding && now - b._hidingSince > HIDE_MAX_SECONDS * 1000) return "hide-timeout";
+    if (b.busy && now - b._busySince > 30000) return "busy-stuck";
+    if (b.running && b._lastLoopAt && now - b._lastLoopAt > b.config.idle_max_seconds * 3000) return "loop-dead";
+
+    const { bounds, size } = { bounds: b.f.bounds, size: this.o.size };
+    const { x, y } = this.o.pos;
+    const outside = x + size < bounds.left || x > bounds.right || y < bounds.top || y - size > bounds.bottom;
+    return outside ? "out-of-bounds" : null;
+  }
+}
+
 /* ------------------------------------------------------------------ Card */
 
 const CARD_CSS = `
@@ -1061,6 +1213,9 @@ const CARD_CSS = `
   @container (max-width: 210px) { .chip-bars { display:none; } }
   @container (max-width: 110px) { .chip-text { display:none; } }
   @container (max-width: 70px) { ha-card { padding:6px; gap:0; } .chip-pet { width:28px; height:28px; } }
+  /* Ist die Zeile ueberbucht (Geschwister mit festen Breiten), schrumpft die Card auf null.
+     Dann bleibt sonst der Rand der ha-card als Stummel stehen. Lieber gar nichts zeigen. */
+  @container (max-width: 44px) { ha-card { display:none; } }
 `;
 
 class PixelCard extends HTMLElement {
@@ -1080,6 +1235,7 @@ class PixelCard extends HTMLElement {
     this._hass = null;
     this._overlay = null;
     this._brain = null;
+    this._watchdog = null;
     this._unsubEvents = null;
     this._lastAttrs = null;
     this._onResize = this._debounce(() => this._brain?._rescan(), 150);
@@ -1177,12 +1333,25 @@ class PixelCard extends HTMLElement {
 
     if (this._lastAttrs) this._brain.update(this._lastAttrs);
     this._brain.start();
+    this._watchdog = new Watchdog({
+      overlay: this._overlay,
+      brain: this._brain,
+      // Raeumt ein fremdes Skript den body ab, ist das Overlay weg, `_overlay` aber gesetzt -
+      // dann blockiert die Card sich selbst und jede andere. Also loslassen und neu aufbauen.
+      onOverlayLost: () => {
+        this._unmount();
+        this._mount();
+      },
+    });
+    this._watchdog.start();
     this._subscribe();
     setTimeout(() => this._brain?._rescan(), 800); // Karten laden oft verzögert
   }
 
   _unmount() {
     if (!this._overlay) return;
+    this._watchdog?.stop();
+    this._watchdog = null;
     this._brain?.stop();
     this._overlay.destroy();
     this._overlay = null;
@@ -1229,7 +1398,8 @@ class PixelCard extends HTMLElement {
       { icon: "⚽", label: t("play"), onClick: () => this._call("play") },
       { icon: "✋", label: t("pet"), onClick: () => this._call("pet") },
     ];
-    if (snap.poop_count > 0) entries.push({ icon: "🧹", label: t("clean"), onClick: () => this._call("clean") });
+    // Auch der Besen raeumt genau eines weg - wie das Antippen eines Haeufchens.
+    if (snap.poop_count > 0) entries.push({ icon: "🧹", label: t("clean"), onClick: () => this._call("clean", { count: 1 }) });
     if (snap.sick || snap.fainted) entries.push({ icon: "💊", label: t("medicine"), onClick: () => this._call("medicine") });
     return entries;
   }

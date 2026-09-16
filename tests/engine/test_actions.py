@@ -81,6 +81,37 @@ def test_clean(engine, world):
     assert engine.state.poop_count == 0
 
 
+def test_clean_single(engine, world):
+    """Ein Haeufchen antippen putzt genau dieses, nicht den ganzen Hof."""
+    engine.state.poop_count = 3
+    engine.state.happiness = 50
+    ev = engine.act("clean", world, count=1)
+    assert ev[0].data == {"removed": 1, "left": 2}
+    assert engine.state.poop_count == 2
+    assert engine.state.happiness == 55
+
+
+def test_clean_count_is_capped(engine, world):
+    """Mehr putzen als da ist, entfernt nur das Vorhandene."""
+    engine.state.poop_count = 1
+    ev = engine.act("clean", world, count=5)
+    assert ev[0].data["removed"] == 1
+    assert engine.state.poop_count == 0
+
+
+def test_clean_bonus_is_per_pile(engine, world):
+    """Einzeln putzen darf nicht lohnender sein als alles auf einmal."""
+    engine.state.poop_count = 3
+    engine.state.happiness = 10
+    engine.act("clean", world)
+    auf_einmal = engine.state.happiness
+    engine.state.poop_count = 3
+    engine.state.happiness = 10
+    for _ in range(3):
+        engine.act("clean", world, count=1)
+    assert engine.state.happiness == auf_einmal
+
+
 def test_medicine_only_when_sick(engine, world):
     assert types(engine.act("medicine", world)) == ["medicine_refused"]
     engine.state.health = 10

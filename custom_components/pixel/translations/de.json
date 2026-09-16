@@ -220,6 +220,10 @@
       "name": "Putzen",
       "description": "Räumt Häufchen weg.",
       "fields": {
+        "count": {
+          "name": "Anzahl",
+          "description": "Wie viele Häufchen weggeputzt werden. Ohne Angabe alle."
+        },
         "config_entry_id": {
           "name": "Tier",
           "description": "Nur nötig, wenn mehrere Tiere existieren."

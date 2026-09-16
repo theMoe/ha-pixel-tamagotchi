@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 DOMAIN = "pixel"
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 EVENT_TYPE = f"{DOMAIN}_event"
 TICK_INTERVAL = timedelta(seconds=60)
 
@@ -48,6 +48,7 @@ ATTR_TEXT = "text"
 ATTR_DURATION = "duration"
 ATTR_TRICK = "trick"
 ATTR_NAME = "name"
+ATTR_COUNT = "count"
 ATTR_CONFIG_ENTRY = "config_entry_id"
 
 # Frontend

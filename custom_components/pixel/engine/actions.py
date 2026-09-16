@@ -82,14 +82,17 @@ class PetActions:
 
     # ------------------------------------------------------------------ Pflege
 
-    def clean(self, s: PetState, w: WorldContext) -> list[GameEvent]:
+    def clean(self, s: PetState, w: WorldContext, count: int | None = None) -> list[GameEvent]:
+        """Ohne ``count`` wird alles weggeputzt, sonst hoechstens so viele Haufen wie angegeben."""
         s.last_interaction = w.now
         if s.poop_count == 0:
             return [GameEvent("nothing_to_clean", {})]
-        removed = s.poop_count
-        s.poop_count = 0
-        s.happiness = clamp(s.happiness + self._cfg.clean_happiness)
-        return [GameEvent("cleaned", {"removed": removed})]
+        removed = s.poop_count if count is None else min(count, s.poop_count)
+        s.poop_count -= removed
+        # Bonus je Haufen, nicht pauschal: sonst waere dreimal einzeln putzen
+        # dreimal so lohnend wie einmal alles auf einen Schlag.
+        s.happiness = clamp(s.happiness + self._cfg.clean_happiness * removed)
+        return [GameEvent("cleaned", {"removed": removed, "left": s.poop_count})]
 
     def medicine(self, s: PetState, w: WorldContext) -> list[GameEvent]:
         cfg = self._cfg
