@@ -271,6 +271,34 @@ assert.equal(objekte().length, 1, "nur das angetippte verschwindet");
   card._brain._trick = origTrick;
 }
 
+// Golf: die Schlagplanung ist eine reine Funktion mit injizierbarem Zufall.
+{
+  const golf = await import(new URL("../../custom_components/pixel/frontend/golf.js", import.meta.url).href);
+  const mitte = (a, b) => (a + b) / 2;
+  assert.deepEqual(golf.planStrokes(30, mitte), [30], "kurze Distanz: ein Schlag");
+  assert.deepEqual(golf.planStrokes(100, (a) => a), [100], "Hole-in-one");
+  assert.deepEqual(golf.planStrokes(100, mitte), [60, 40], "zwei Schlaege, Summe stimmt");
+  const drei = golf.planStrokes(200, (a, b) => a + (b - a) * 0.999);
+  assert.equal(drei.length, 3, "drei Schlaege");
+  assert.equal(drei.reduce((s, x) => s + x, 0), 200);
+  const gesehen = new Set();
+  for (let i = 0; i < 300; i++) {
+    const d = 40 + Math.floor(Math.random() * 461);
+    const s = golf.planStrokes(d);
+    assert.equal(s.reduce((a, x) => a + x, 0), d, "Summe = Distanz");
+    assert.ok(s.length >= 1 && s.length <= golf.MAX_STROKES, "1 bis 3 Schlaege");
+    assert.ok(s.every((x) => x > 0), "kein Schlag der Laenge 0");
+    gesehen.add(s.length);
+  }
+  assert.deepEqual([...gesehen].sort(), [1, 2, 3], "alle drei Varianten kommen vor");
+}
+// Standflaeche fuer Abschlag und Landepunkte: ueber einer Karte deren Oberkante, daneben der Boden.
+{
+  const karte = card._brain.f.climbable()[0];
+  assert.equal(card._brain._surfaceY((karte.x1 + karte.x2) / 2), karte.top, "ueber der Karte");
+  assert.equal(card._brain._surfaceY(card._brain.f.bounds.right - 1), card._brain.f.floorY, "am Rand der Boden");
+}
+
 // Der Besuch ist eine Datenzeile in der Aktionstabelle, sobald etwas steht.
 card.hass = { ...hass, states: { "sensor.pixel_status": { state: "happy", attributes: { ...attrs, builds: [] } } } };
 await tick(10);

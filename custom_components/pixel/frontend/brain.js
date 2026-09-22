@@ -4,6 +4,7 @@ import { HIDE_MAX_SECONDS, HIDE_SINK } from "./const.js";
 import { Texts } from "./texts.js";
 import { BUILD_KINDS } from "./builds.js";
 import { chooseIdleAction } from "./idle.js";
+import { MIN_ROOM, TEE_MAX, TEE_MIN, planStrokes } from "./golf.js";
 import { clamp, deepElementFromPoint, pick, reducedMotion, rnd, wait } from "./util.js";
 
 export class Brain {
@@ -114,10 +115,13 @@ export class Brain {
   _buildSpot(build, art) {
     const b = this.f.bounds;
     const x = clamp(b.left + (build.rx ?? 0.5) * (b.right - b.left), b.left + 4, b.right - art.width - 4);
-    const mitte = x + art.width / 2;
-    const traeger = this.f.climbable().filter((c) => mitte >= c.x1 && mitte <= c.x2);
-    const y = traeger.length ? Math.min(...traeger.map((c) => c.top)) : this.f.floorY;
-    return { x, y };
+    return { x, y: this._surfaceY(x + art.width / 2) };
+  }
+
+  /** Standflaeche an einer waagerechten Position: hoechste Karte darueber, sonst der Boden. */
+  _surfaceY(x) {
+    const traeger = this.f.climbable().filter((c) => x >= c.x1 && x <= c.x2);
+    return traeger.length ? Math.min(...traeger.map((c) => c.top)) : this.f.floorY;
   }
 
   _buildById(id) {
@@ -132,6 +136,7 @@ export class Brain {
     const ziel = this._yard.spotOf(build);
     if (!ziel) return this._walkRandom();
     const art = BUILD_KINDS[build.kind] || BUILD_KINDS.house;
+    if (build.kind === "golf") return this._playGolf(build, ziel, art);
     const links = Math.random() < 0.5;
     const x = clamp(
       links ? ziel.x - this.o.size + 6 : ziel.x + art.width - 6,
@@ -143,11 +148,45 @@ export class Brain {
     if (!ok) return undefined;
     this.o.rig.face(!links);
     this.o.say(this.t(art.text), 1800);
-    if (build.kind === "golf") {
-      this._yard.putt({ x: this.o.pos.x + this.o.size / 2, y: this.o.pos.y - 10 }, { x: ziel.x + art.width / 2, y: ziel.y - 4 });
-      await this.o.rig.play("wave", 900);
-    }
     return this._yard.busy(build, 3000);
+  }
+
+  /**
+   * Golf: Anlauf irgendwo auf dem Dashboard (Seite mit mehr Platz, Distanz zufaellig),
+   * dann ein bis drei Schlaege Richtung Loch. Jeder Ball landet auf einer Standflaeche,
+   * das Tier geht hin und schlaegt weiter; der letzte Schlag versenkt ihn.
+   */
+  async _playGolf(build, ziel, art) {
+    const b = this.f.bounds;
+    const size = this.o.size;
+    const loch = { x: ziel.x + art.width / 2, y: ziel.y - 5 };
+    const raumLinks = ziel.x - b.left - size;
+    const raumRechts = b.right - (ziel.x + art.width) - size;
+    const links = raumLinks >= raumRechts;
+    const raum = Math.max(raumLinks, raumRechts);
+    const distanz = raum < MIN_ROOM ? Math.max(0, raum) : rnd(TEE_MIN, clamp(raum, TEE_MIN, TEE_MAX));
+    const richtung = links ? 1 : -1; // Flugrichtung des Balls
+    let ballX = clamp(loch.x - richtung * distanz, b.left + size / 2, b.right - size / 2);
+
+    this.anchor = null;
+    if (!(await this.m.to(ballX - size / 2, this._surfaceY(ballX)))) return;
+    this.o.rig.face(loch.x < ballX);
+    this.o.say(this.t(art.text), 1500);
+
+    const strokes = planStrokes(Math.abs(loch.x - ballX));
+    for (const [i, len] of strokes.entries()) {
+      if (!this.running || this.snap?.animations_enabled === false) return;
+      const letzter = i === strokes.length - 1;
+      const von = { x: ballX, y: this.o.pos.y - 3 };
+      ballX = letzter ? loch.x : ballX + richtung * len;
+      const nach = letzter ? loch : { x: ballX, y: this._surfaceY(ballX) - 3 };
+      await Promise.all([this._yard.putt(von, nach, { sink: letzter }), this.o.rig.play("wave", 600)]);
+      if (letzter) break;
+      if (!(await this.m.to(ballX - size / 2, this._surfaceY(ballX)))) return;
+      this.o.rig.face(loch.x < ballX);
+    }
+    this.o.say(this.t("golf_in"), 1500);
+    return this._yard.busy(build, 1500);
   }
 
   _onActivity(activity) {

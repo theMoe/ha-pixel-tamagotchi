@@ -9,6 +9,8 @@
  * shape-rendering:crispEdges) und sitzen mit der Unterkante auf der Standflaeche.
  */
 
+import { clamp } from "./util.js";
+
 const svg = (w, h, inhalt) => `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%">${inhalt}</svg>`;
 
 export const BUILD_KINDS = {
@@ -72,7 +74,7 @@ export const BUILD_KINDS = {
       15,
       20,
       `<ellipse cx="7.5" cy="18" rx="6" ry="2" fill="#2e7d32"/><ellipse cx="7.5" cy="17.5" rx="2" ry="1" fill="#111"/>
-       <rect x="7" y="2" width="1" height="15" fill="#eceff1"/><path d="M8 2h6v4H8z" fill="#e53935"/>`,
+       <rect x="7" y="2" width="1" height="15" fill="#eceff1"/><path class="flag" d="M8 2h6v4H8z" fill="#e53935"/>`,
     ),
   },
 };
@@ -84,10 +86,12 @@ export const BUILDS_CSS = `
   .pixel-build.busy .chimney { animation:pixel-smoke 1.2s ease-out infinite; }
   .pixel-build.busy .seat { animation:pixel-swing 1.4s ease-in-out infinite; transform-origin:50% 8%; transform-box:fill-box; }
   .pixel-build.busy .bloom { animation:pixel-bloom 1s ease-in-out infinite alternate; transform-origin:50% 100%; transform-box:fill-box; }
+  .pixel-build.busy .flag { animation:pixel-flag .8s steps(2) infinite; transform-origin:0 50%; transform-box:fill-box; }
   .pixel-ball { position:absolute; width:6px; height:6px; border-radius:50%; background:#fff; box-shadow:0 0 0 1px #90a4ae; }
   @keyframes pixel-smoke { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(-8px); } }
   @keyframes pixel-swing { 0%,100% { transform:rotate(-14deg); } 50% { transform:rotate(14deg); } }
   @keyframes pixel-bloom { to { transform:scaleY(1.15); } }
+  @keyframes pixel-flag { 0%,100% { transform:scaleX(1); } 50% { transform:scaleX(.6); } }
   @media (prefers-reduced-motion: reduce) { .pixel-build.busy * { animation:none !important; } }
 `;
 
@@ -101,6 +105,7 @@ export class BuildYard {
     this.layer = layer;
     this.onRemove = onRemove;
     this.items = new Map(); // id -> { el, build }
+    this._ball = null; // der eine Golfball; bleibt zwischen zwei Schlaegen liegen
   }
 
   sync(builds, place) {
@@ -150,28 +155,51 @@ export class BuildYard {
     eintrag.el.classList.remove("busy");
   }
 
-  /** Golfball: fliegt im Bogen vom Tier zur Fahne und verschwindet. */
-  putt(from, to, ms = 900) {
-    const ball = document.createElement("div");
-    ball.className = "pixel-ball";
-    ball.style.left = `${from.x}px`;
-    ball.style.top = `${from.y}px`;
-    this.layer.appendChild(ball);
-    const start = performance.now();
-    const step = (now) => {
-      const t = Math.min(1, (now - start) / ms);
-      const bogen = Math.sin(t * Math.PI) * 40;
-      ball.style.left = `${from.x + (to.x - from.x) * t}px`;
-      ball.style.top = `${from.y + (to.y - from.y) * t - bogen}px`;
-      if (t < 1) requestAnimationFrame(step);
-      else ball.remove();
+  /**
+   * Golfball: fliegt im Bogen von ``from`` nach ``to`` (Mittelpunkte). Dauer und Bogen
+   * wachsen mit der Distanz. Der Ball bleibt danach liegen, damit das Tier hingehen und
+   * weiterschlagen kann; ``sink`` versenkt ihn am Ende. Loest auf, sobald der Ball liegt.
+   */
+  putt(from, to, { sink = false } = {}) {
+    const ball = this._ball ?? (this._ball = this._createBall());
+    const dist = Math.hypot(to.x - from.x, to.y - from.y);
+    const ms = clamp(dist * 4, 400, 1200);
+    const hoehe = clamp(dist * 0.25, 8, 48);
+    const setzen = (x, y) => {
+      ball.style.left = `${x - 3}px`;
+      ball.style.top = `${y - 3}px`;
     };
-    requestAnimationFrame(step);
+    setzen(from.x, from.y);
+    return new Promise((resolve) => {
+      const start = performance.now();
+      const step = (now) => {
+        const t = Math.min(1, (now - start) / ms);
+        const bogen = Math.sin(t * Math.PI) * hoehe;
+        setzen(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t - bogen);
+        if (t < 1) return requestAnimationFrame(step);
+        if (sink) this.dropBall();
+        resolve();
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  dropBall() {
+    this._ball?.remove();
+    this._ball = null;
   }
 
   clear() {
     for (const { el } of this.items.values()) el.remove();
     this.items.clear();
+    this.dropBall();
+  }
+
+  _createBall() {
+    const ball = document.createElement("div");
+    ball.className = "pixel-ball";
+    this.layer.appendChild(ball);
+    return ball;
   }
 
   _create(build) {
