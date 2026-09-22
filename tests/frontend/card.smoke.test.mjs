@@ -194,6 +194,9 @@ subscriber({ data: { entry_id: "x", type: "appointment_soon", title: "Termin A",
 await tick(1200);
 assert.ok(overlay.querySelector(".pixel-bubble").textContent.includes("Termin A"), "Termin in Sprechblase");
 subscriber({ data: { entry_id: "other", type: "say", text: "fremd" } });
+subscriber({ data: { entry_id: "x", type: "fell_asleep", reason: "tired" } });
+await tick(50);
+assert.ok(overlay.querySelector(".pixel-bubble").textContent.includes("nickerchen"), "Nickerchen-Text beim Erschoepfungsschlaf");
 assert.ok(!overlay.querySelector(".pixel-bubble").textContent.includes("fremd"), "fremde entry_id ignoriert");
 
 // Verstecken erzwingen und durch Karten-Tap aufscheuchen
