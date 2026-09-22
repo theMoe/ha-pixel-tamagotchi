@@ -126,6 +126,7 @@ class PetEngine:
             "fainted": s.fainted,
             "poop_count": s.poop_count,
             "builds": [b.as_dict() for b in s.builds],
+            "next_build_at": s.build_due_at.isoformat() if s.build_due_at else None,
             "needs_attention": self.needs_attention(w),
             "total_feeds": s.total_feeds,
             "total_plays": s.total_plays,

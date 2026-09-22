@@ -82,7 +82,7 @@ SENSORS: tuple[PixelSensorDescription, ...] = (
         translation_key="builds",
         icon="mdi:home-plus-outline",
         value_fn=lambda s: len(s.get("builds") or []),
-        attributes_fn=lambda s: {"items": s.get("builds") or []},
+        attributes_fn=lambda s: {"items": s.get("builds") or [], "next_at": s.get("next_build_at")},
     ),
     PixelSensorDescription(
         key="stress_level",

@@ -229,10 +229,31 @@ def test_build_respects_limits(engine, world):
     engine.state.build_due_at = world.now
     engine.tick(world)
     assert engine.state.builds == []
+    # Ein Fehlversuch schiebt nur kurz auf, nicht um ein ganzes Intervall.
+    assert engine.state.build_due_at == world.now + timedelta(minutes=engine.cfg.build_retry_minutes)
 
     for _ in range(engine.cfg.max_builds + 3):
         _build_once(engine, world)
     assert len(engine.state.builds) == engine.cfg.max_builds
+    assert engine.state.build_due_at == world.now + timedelta(minutes=engine.cfg.build_retry_minutes)
+
+
+def test_build_retries_soon_after_bad_mood(engine, world):
+    """Zur Faelligkeit schlecht gelaunt, kurz darauf gut: der zweite Versuch baut."""
+    engine.state.stage = Stage.ADULT
+    engine.state.energy = 90
+    engine.state.happiness = 10
+    engine.state.build_due_at = world.now
+    engine.tick(world)
+    assert engine.state.builds == []
+
+    later = advance(world, minutes=engine.cfg.build_retry_minutes)
+    engine.state.happiness = 90
+    ev = engine.tick(later)
+    assert events_of(ev, "built")
+    assert len(engine.state.builds) == 1
+    assert engine.state.build_due_at == later.now + timedelta(hours=engine.cfg.build_interval_hours)
+    assert engine.snapshot(later)["next_build_at"] == engine.state.build_due_at.isoformat()
 
 
 def _build_once(engine, world):

@@ -166,7 +166,10 @@ class BuildRule:
     """Bei guter Laune baut das Tier ab und an etwas auf das Dashboard.
 
     Die Fälligkeit steht im ``PetState`` und nicht in der Regelinstanz: regelinterner
-    Zustand überlebt weder einen Neustart noch ``apply_settings``.
+    Zustand überlebt weder einen Neustart noch ``apply_settings``. Ist das Tier zur
+    Fälligkeit nicht in Stimmung (Laune, Energie, Obergrenze), wartet die Regel nur
+    ``build_retry_minutes`` und nicht ein ganzes Intervall. Schläft es, bleibt die
+    Fälligkeit stehen und greift beim Aufwachen.
     """
 
     def apply(self, ctx: TickContext) -> None:
@@ -178,11 +181,10 @@ class BuildRule:
             return
         if w.now < s.build_due_at:
             return
+        if not self._can_build(s, cfg):
+            s.build_due_at = w.now + timedelta(minutes=cfg.build_retry_minutes)
+            return
         s.build_due_at = w.now + timedelta(hours=cfg.build_interval_hours)
-        if len(s.builds) >= cfg.max_builds:
-            return
-        if s.happiness < cfg.build_min_happiness or s.energy < cfg.build_min_energy:
-            return
 
         build = Build(
             id=str(int(w.now.timestamp())),
@@ -196,6 +198,13 @@ class BuildRule:
         s.activity = Activity.BUILDING
         s.activity_until = w.now + timedelta(seconds=cfg.building_seconds)
         ctx.emit("built", id=build.id, kind=build.kind, rx=build.rx)
+
+    @staticmethod
+    def _can_build(s: PetState, cfg: GameConfig) -> bool:
+        """Platz frei und das Tier in Stimmung: gut gelaunt und ausgeruht."""
+        if len(s.builds) >= cfg.max_builds:
+            return False
+        return s.happiness >= cfg.build_min_happiness and s.energy >= cfg.build_min_energy
 
 
 def _pick_kind(s: PetState, w: WorldContext) -> BuildKind:

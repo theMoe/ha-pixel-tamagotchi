@@ -76,6 +76,7 @@ class GameConfig:
 
     # Bauen
     build_interval_hours: float = 8.0
+    build_retry_minutes: int = 30  # Fehlversuch (Laune, Energie, Obergrenze): kurz warten statt ein Intervall
     build_min_happiness: float = 60.0
     build_min_energy: float = 35.0
     build_energy_cost: float = 6.0

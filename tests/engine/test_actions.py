@@ -173,7 +173,17 @@ def test_weather_outfits(engine, weather, temp, expected):
 
 def test_snapshot_contains_card_relevant_fields(engine, world):
     snap = engine.snapshot(world)
-    keys = ("mood", "activity", "outfit", "hunger", "stress_level", "needs_attention", "feeding_window", "vacation")
+    keys = (
+        "mood",
+        "activity",
+        "outfit",
+        "hunger",
+        "stress_level",
+        "needs_attention",
+        "feeding_window",
+        "vacation",
+        "next_build_at",
+    )
     for key in keys:
         assert key in snap
 
