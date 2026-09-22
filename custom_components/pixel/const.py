@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 DOMAIN = "pixel"
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 EVENT_TYPE = f"{DOMAIN}_event"
 TICK_INTERVAL = timedelta(seconds=60)
 

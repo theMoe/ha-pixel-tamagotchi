@@ -1,7 +1,7 @@
 # PROJEKTSTAND – Pixel, Dashboard-Tamagotchi für Home Assistant
 
 > Briefing für die nächste Session. Zuerst lesen, dann `README.md` für Nutzersicht, `docs/KONZEPT.md` für die Idee.
-> Stand: 22.09.2026 · Version 0.2.0 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
+> Stand: 22.09.2026 · Version 0.2.1 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
 
 ## 1. Was ist das
 
@@ -35,7 +35,7 @@ custom_components/pixel/
   translations/de.json, en.json, strings.json   (Schlüssel identisch, geprüft)
   services.yaml, manifest.json
 tests/
-  engine/                 49 Tests, reine Python, kein HA nötig (conftest hängt engine/ in sys.path)
+  engine/                 50 Tests, reine Python, kein HA nötig (conftest hängt engine/ in sys.path)
   test_integration.py     11 Tests mit pytest-homeassistant-custom-component (Setup, Services, Reload, Optionen, Urlaub)
   frontend/card.smoke.test.mjs   jsdom-Smoke-Test der Card (Mount, Scan, Menü, Events, Verstecken, Unmount)
 docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card + Mock-hass)
@@ -68,6 +68,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 18. **Urlaub ist ein Regelfilter, kein Regel-Flag.** `PetState.vacation` lässt die Engine pro Tick nur `vacation_rules()` laufen (dieselben Instanzen minus `PAUSED_ON_VACATION`); keine Regel kennt den Urlaub. `last_tick` läuft weiter, es wird eingefroren, nicht aufgeschoben (ein anstehendes Häufchen kommt nach dem Urlaub trotzdem). Der Schlaf pausiert mit, weil ein Tier mit eingefrorener Energie unter der Ausgeschlafen-Schwelle nie mehr aufwachen würde; das Urlaubstier ist wach, auch nachts. Nur manuell (Schalter/Service), Automatik gehört in eine HA-Automation. Verworfen: `if s.vacation` in acht Regeln (Shotgun-Surgery) und ein Zeitstopp über `last_tick` (dann käme nach dem Urlaub eine 12-h-Nachrechnung).
 19. **Spielen reihum wird im Backend entschieden.** `play` wählt per `next_in_rotation` das nächste Objekt aus den *aktuell vorhandenen* und persistiert `last_played_build_id`; die Card reagiert auf das `played`-Event (`build_id`), nicht auf den Activity-Wechsel. Grund: gleiche Reihenfolge auf allen Clients und nach Neustart, und nur ein Auslöser für die Animation (Coordinator feuert das Event vor dem Snapshot, ein zweiter Auslöser über `activity` verlöre ohnehin gegen `busy`).
 20. **Golf-Schlagplanung als reine Funktion** (`golf.js: planStrokes`) mit injizierbarem Zufall, im Smoke-Test abgedeckt. Das Brain macht nur Wege und Animation: Abschlag auf der Seite mit mehr Platz, jeder Ball landet auf einer Standfläche (`_surfaceY`, aus `_buildSpot` herausgezogen), ein einziger Ball im `BuildYard`, `TEE_MAX = 500` hält die Runde unter der Watchdog-Grenze (Worst Case ≈ 21 s bei 30 s Limit).
+21. **Baufälligkeit liegt im `PetState`, Fehlversuche schieben nur kurz auf.** `build_due_at` überlebt Neustart und `apply_settings`. Bis 0.2.0 schob die `BuildRule` die Fälligkeit *vor* der Prüfung von Laune/Energie/Obergrenze um ein ganzes Intervall weiter; ein schlecht gelaunter Moment (z. B. direkt nach dem Aufwachen) kostete so 8 h, unsichtbar. Seit 0.2.1 prüft `_can_build` zuerst, ein Fehlversuch wartet `build_retry_minutes` (30), Schlaf/Krankheit/Ei lassen die Fälligkeit stehen. `next_build_at` steht im Snapshot und am `builds`-Sensor (`next_at`), damit sich „warum baut es nicht?“ ohne Store-Blick beantworten lässt.
 
 ## 4. Konventionen
 
@@ -83,7 +84,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 
 | Bereich | Status |
 |---|---|
-| Engine | 49 Tests grün. Balancing plausibel, aber **nicht im Alltag erprobt** (Zahlen ggf. nach 1–2 Wochen nachjustieren). |
+| Engine | 50 Tests grün. Balancing plausibel, aber **nicht im Alltag erprobt** (Zahlen ggf. nach 1–2 Wochen nachjustieren). |
 | Integration | 11 Tests grün gegen **HA 2026.9.0 und 2026.8.3 (Python 3.14)** sowie 2025.1.4 (Python 3.12); keine Deprecation-Hinweise zu `custom_components.pixel`. Ruff sauber unter 3.14. **Nicht auf einer Live-Instanz gestartet.** |
 | Config-Flow | Programmatisch geprüft (Import, Schema). UI-Durchlauf nicht getestet. |
 | Card | jsdom-Smoke-Test grün, `node --check` sauber, Demo-Seite vorhanden. **Im echten HA-Frontend noch nie gelaufen**, aber gegen ein reales Dashboard-YAML (Sections-View, fixe Navigations-Card, Wallpanel-Kiosk, durchweg Custom Cards) durchgesehen – die Befunde daraus sind in 0.1.2 eingearbeitet. **Die Farbwerte des hellen Themes sind rechnerisch gewählt und noch nicht im Browser beurteilt** → `docs/card-demo.html` öffnen, Umschalter „hell/dunkel“ × Stufe „egg“. **Golf (0.2.0) und Urlaubsoutfit sind ebenfalls nur in jsdom gelaufen** (die Golfrunde fünfmal komplett, ohne Fehler, Ball versenkt), nicht im Browser beurteilt → Demo-Seite: Golfloch bauen, ⚽ drücken; Checkbox „Urlaub“. Verbleibendes Restrisiko: Touch-Verhalten auf dem Pi-Kiosk, Erkennung ungewöhnlicher fixer Leisten, `position: fixed` des Overlays, falls Wallpanel `transform`/`filter` auf `body` setzt (das würde die Koordinaten verschieben). |
@@ -98,13 +99,14 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 5. Card in die Sections-View des Wandtablets legen, hart neu laden, Konsole auf `PIXEL-CARD loaded` prüfen.
 6. Beobachten: läuft es auf Karten? Versteckt es sich hinter dem Kalender? Menü per Tap? Long-Press-Statistik?
 7. Bei Problemen mit dem Scan: in der Konsole `document.querySelector("pixel-card")._brain.f.cards` ansehen.
-8. Performance auf dem Pi 4: bei Rucklern `scale` verkleinern, `idle_min_seconds` erhöhen, ggf. `switch.pixel_animations` per Präsenz steuern.
+8. Bauen: `sensor.pixel_builds` → Attribut `next_at` (erster Bau frühestens 8 h nach dem ersten Tick). Baut es trotz vergangenem Zeitpunkt nicht: `switch.pixel_vacation`, `sleeping`/`sick`/`stage`, `happiness` ≥ 60, `energy` ≥ 35 in `sensor.pixel_status` prüfen.
+9. Performance auf dem Pi 4: bei Rucklern `scale` verkleinern, `idle_min_seconds` erhöhen, ggf. `switch.pixel_animations` per Präsenz steuern.
 
 ## 7. Backlog (priorisiert)
 
 **P1 – nach erstem Live-Test wahrscheinlich nötig**
 - Card-Feinschliff aus Live-Feedback (Scan-Robustheit, z-index, Touch).
-- Balancing-Justage nach realer Nutzung (Tempo, Fütterungsfenster, Häufchen-Frequenz).
+- Balancing-Justage nach realer Nutzung (Tempo, Fütterungsfenster, Häufchen-Frequenz, Bau-Intervall und Retry).
 - Visueller Editor für die Card (`getConfigElement`) – aktuell nur YAML/Karten-Picker mit Stub.
 
 **P2 – Konzept-Features noch offen**
@@ -139,6 +141,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - **Der Smoke-Test lädt die Card als echtes Modul.** `window.eval` wertet nach dem Script-Goal aus und bricht an der ersten `import`-Zeile. Stattdessen liegen die jsdom-Globals auf `globalThis`, dann `await import(...)`. Zwei Fallen: `performance` darf **nicht** übernommen werden (jsdoms `Performance.now()` ruft das globale `performance` auf und läuft in eine Endlosrekursion, sobald es selbst das globale ist), und Stubs gehören auf `globalThis`, nicht auf `window` — der Modulcode läuft im Node-Realm und bindet `getComputedStyle` beim Import.
 - **Keine `datetime` in Listenfeldern des `PetState`.** `to_dict` wandelt nur Felder der obersten Ebene nach ISO; ein Zeitstempel innerhalb von `builds` bräche den Roundtrip. Deshalb ist `Build.created` ein ISO-String.
 - **Neue `Activity`-/`Mood`-Werte nicht ans Ende hängen.** Der Fallback für unbekannte gespeicherte Werte ist `list(enum_cls)[-1]`. Die `options`-Liste am `activity`-Sensor muss mitziehen, sonst loggt HA einen ungültigen Enum-Zustand; neue Stimmungen zusätzlich in `services.yaml` (`set_mood`) und in `entity.select.mood.state` + `selector.mood.options` aller drei Übersetzungen.
+- **Ein Bau ist kein Ereignis, das man nachholen kann.** Beim Update/Neustart bleibt `build_due_at` stehen; nach `MAX_TICK_HOURS` Ausfall wird trotzdem nur einmal gebaut. Wer im Live-Betrieb „es baut nichts“ hört: erst `next_at` am `builds`-Sensor lesen, dann die Bedingungen (Abschnitt 6, Punkt 8), bevor die Regel verdächtigt wird.
 - **Im Urlaub bleibt krank krank.** `HealthRule` pausiert, ein bei Urlaubsbeginn krankes Tier trägt bis zur Medizin das Thermometer (Mood `sick` steht über `vacation`). Die In-Memory-Merker pausierter Regeln (`_was_hungry`, `_reminded_window`) behalten ihren Stand – harmlos, weil Hunger eingefroren ist.
 - **Der Setup-Integrationstest patcht die Uhrzeit.** Der Test-Kern läuft in US/Pacific; ohne festen Zeitpunkt schläft das Tier dort nachts und trägt die Schlafmütze statt der Sonnenbrille. Wer neue Setup-Assertions zum Outfit schreibt, hält sich an das Muster in `test_setup_creates_entities_and_services`.
 - jsdom-Test stubbt `getBoundingClientRect`; Layout-Fragen (Überlappung, Clip-Optik) und **Farbkontraste** sind damit **nicht** abgedeckt → `docs/card-demo.html` im Browser öffnen (hat seit 0.1.2 einen Hell/Dunkel-Umschalter und eine fixe Leiste am unteren Rand, seit 0.1.4 eine Auswahl zum Bauen).
