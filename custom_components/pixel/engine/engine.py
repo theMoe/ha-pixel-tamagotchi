@@ -137,8 +137,12 @@ class PetEngine:
             "vacation": s.vacation,
         }
         if w is not None:
+            night = cfg.is_night(w.local_now.time())
+            reason = s.sleep_reason(night)
             data.update(
                 {
+                    "sleep_reason": str(reason) if reason else None,
+                    "night_hours": f"{cfg.night_start:%H:%M}-{cfg.night_end:%H:%M}",
                     "age_days": s.age_days(w.now),
                     "weather": str(w.weather),
                     "temperature": w.temperature,
@@ -146,7 +150,7 @@ class PetEngine:
                     "stress_level": self._stress.evaluate(w, cfg),
                     "persons_home": w.persons_home,
                     "media_playing": w.media_playing,
-                    "is_night": cfg.is_night(w.local_now.time()),
+                    "is_night": night,
                     "is_weekend": w.is_weekend,
                     "feeding_window": cfg.in_feeding_window(w.local_now.time()) is not None,
                     "next_event_title": w.next_event.title if w.next_event else None,

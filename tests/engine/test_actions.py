@@ -54,6 +54,12 @@ def test_play_needs_energy(engine, world):
     assert engine.state.mood is Mood.EXCITED
 
 
+def test_manual_sleep_carries_reason(engine, world):
+    ev = engine.act("sleep", world)
+    assert ev[0].data["reason"] == "manual"
+    assert engine.snapshot(world)["sleep_reason"] == "manual"
+
+
 def test_pet_while_sleeping_grumbles(engine):
     night = make_world(hour=23)
     engine.state.last_tick = night.now
@@ -183,6 +189,8 @@ def test_snapshot_contains_card_relevant_fields(engine, world):
         "feeding_window",
         "vacation",
         "next_build_at",
+        "sleep_reason",
+        "night_hours",
     )
     for key in keys:
         assert key in snap

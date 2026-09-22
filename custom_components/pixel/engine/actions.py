@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 
 from .config import GameConfig
-from .models import Activity, Build, GameEvent, Meal, Mood, PetState, WorldContext
+from .models import Activity, Build, GameEvent, Meal, Mood, PetState, SleepReason, WorldContext
 from .rules import clamp
 
 
@@ -155,7 +155,7 @@ class PetActions:
         self._require_conscious(s)
         s.sleeping_manual = True
         s.sleeping = True
-        return [GameEvent("fell_asleep", {"manual": True})]
+        return [GameEvent("fell_asleep", {"manual": True, "reason": str(SleepReason.MANUAL)})]
 
     def wake(self, s: PetState, w: WorldContext) -> list[GameEvent]:
         s.sleeping_manual = False

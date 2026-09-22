@@ -82,7 +82,12 @@ class PresenceRule:
 
 
 class SleepRule:
-    """Entscheidet, ob das Tier schläft (manuell, Nacht oder erschöpft)."""
+    """Entscheidet, ob das Tier schläft (manuell, Nacht oder erschöpft).
+
+    Automatischer Schlaf endet, sobald die Nacht vorbei ist und die Energie
+    ``nap_rested_threshold`` erreicht: ein Nickerchen aus Erschöpfung dauert so
+    etwa zwei Stunden statt bis zum vollen Ausgeschlafensein.
+    """
 
     def apply(self, ctx: TickContext) -> None:
         s, cfg = ctx.state, ctx.cfg
@@ -99,13 +104,17 @@ class SleepRule:
         elif s.fainted:
             sleeping = False
         elif s.sleeping:
-            sleeping = night or s.energy < cfg.rested_threshold
+            sleeping = night or s.energy < cfg.nap_rested_threshold
         else:
             sleeping = night or s.energy < cfg.low_energy_threshold
 
-        if sleeping != s.sleeping:
-            s.sleeping = sleeping
-            ctx.emit("fell_asleep" if sleeping else "woke_up")
+        if sleeping == s.sleeping:
+            return
+        s.sleeping = sleeping
+        if sleeping:
+            ctx.emit("fell_asleep", reason=str(s.sleep_reason(night)))
+        else:
+            ctx.emit("woke_up")
 
 
 class NeedsDecayRule:

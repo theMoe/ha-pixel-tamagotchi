@@ -66,6 +66,14 @@ class Activity(StrEnum):
     FAINTED = "fainted"
 
 
+class SleepReason(StrEnum):
+    """Warum das Tier schläft. Ableitung aus Zustand und Tageszeit, nicht gespeichert."""
+
+    NIGHT = "night"
+    TIRED = "tired"
+    MANUAL = "manual"
+
+
 class Meal(StrEnum):
     """Mahlzeitentypen für den Service pixel.feed."""
 
@@ -234,6 +242,14 @@ class PetState:
     def is_sick(self) -> bool:
         return self.sick_since is not None
 
+    def sleep_reason(self, night: bool) -> SleepReason | None:
+        """Warum es gerade schläft; ``None`` wenn es wach ist."""
+        if not self.sleeping:
+            return None
+        if self.sleeping_manual is True:
+            return SleepReason.MANUAL
+        return SleepReason.NIGHT if night else SleepReason.TIRED
+
     def age_days(self, now: datetime) -> int:
         return max(0, (now - self.born_at).days)
 
@@ -308,6 +324,7 @@ __all__ = [
     "Mood",
     "Outfit",
     "PetState",
+    "SleepReason",
     "Stage",
     "WeatherKind",
     "WorldContext",

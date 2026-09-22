@@ -46,11 +46,34 @@ def test_sleeps_at_night_and_regenerates(engine):
     engine.state.energy = 40
     ev = engine.tick(night)
     assert engine.state.sleeping
-    assert events_of(ev, "fell_asleep")
+    assert events_of(ev, "fell_asleep")[0].data["reason"] == "night"
     assert engine.state.mood is Mood.SLEEPING
     assert engine.state.outfit.hat == "sleep_cap"
+    snap = engine.snapshot(night)
+    assert snap["sleep_reason"] == "night"
+    assert snap["night_hours"] == "22:00-06:30"
     engine.tick(advance(night, hours=1))
     assert engine.state.energy > 40
+
+
+def test_nap_ends_when_somewhat_rested(engine):
+    """Erschoepfung am Tag: kurzes Nickerchen bis nap_rested_threshold, nicht bis ausgeschlafen."""
+    day = make_world(hour=14)
+    engine.state.last_tick = day.now
+    engine.state.energy = 10
+    ev = engine.tick(day)
+    assert engine.state.sleeping
+    assert events_of(ev, "fell_asleep")[0].data["reason"] == "tired"
+    assert engine.snapshot(day)["sleep_reason"] == "tired"
+
+    engine.tick(advance(day, hours=2))  # ca. 34 Energie
+    assert engine.state.sleeping, "unter der Nickerchen-Schwelle schlaeft es weiter"
+    engine.tick(advance(day, hours=3))  # ca. 46 Energie; SleepRule sieht sie erst im naechsten Tick
+    later = advance(day, hours=3, minutes=1)
+    ev = engine.tick(later)
+    assert not engine.state.sleeping
+    assert events_of(ev, "woke_up")
+    assert engine.snapshot(later)["sleep_reason"] is None
 
 
 def test_wakes_up_in_the_morning(engine):

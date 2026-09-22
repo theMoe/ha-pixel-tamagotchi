@@ -41,8 +41,9 @@ class GameConfig:
     starving_threshold: float = 15.0
     sick_threshold: float = 30.0
     recovered_threshold: float = 50.0
-    low_energy_threshold: float = 15.0
-    rested_threshold: float = 60.0
+    low_energy_threshold: float = 15.0  # darunter schläft das Tier ein, auch am Tag
+    nap_rested_threshold: float = 40.0  # automatischer Schlaf (Nacht, Erschöpfung) endet hier
+    rested_threshold: float = 60.0  # ab hier verfällt ein manueller Schlaf am Tag
     lonely_happiness_threshold: float = 40.0
     bored_after_hours: float = 6.0
     stress_busy_appointments: int = 3

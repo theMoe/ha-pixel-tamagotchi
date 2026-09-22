@@ -17,10 +17,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .coordinator import PixelConfigEntry
 from .entity import PixelEntity
 
+Snapshot = dict[str, Any]
+
 
 @dataclass(frozen=True, kw_only=True)
 class PixelBinarySensorDescription(BinarySensorEntityDescription):
-    is_on_fn: Callable[[dict[str, Any]], bool]
+    is_on_fn: Callable[[Snapshot], bool]
+    attributes_fn: Callable[[Snapshot], dict[str, Any]] | None = None
 
 
 BINARY_SENSORS: tuple[PixelBinarySensorDescription, ...] = (
@@ -43,12 +46,18 @@ BINARY_SENSORS: tuple[PixelBinarySensorDescription, ...] = (
         translation_key="poop",
         icon="mdi:emoticon-poop",
         is_on_fn=lambda s: (s.get("poop_count") or 0) > 0,
+        attributes_fn=lambda s: {"count": s.get("poop_count", 0)},
     ),
     PixelBinarySensorDescription(
         key="sleeping",
         translation_key="sleeping",
         icon="mdi:sleep",
         is_on_fn=lambda s: bool(s.get("sleeping")),
+        attributes_fn=lambda s: {
+            "reason": s.get("sleep_reason"),
+            "night_hours": s.get("night_hours"),
+            "energy": s.get("energy"),
+        },
     ),
     PixelBinarySensorDescription(
         key="fainted",
@@ -81,6 +90,5 @@ class PixelBinarySensor(PixelEntity, BinarySensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        if self.entity_description.key == "poop":
-            return {"count": self.snapshot.get("poop_count", 0)}
-        return None
+        fn = self.entity_description.attributes_fn
+        return fn(self.snapshot) if fn else None
