@@ -118,7 +118,7 @@ Alle Entities hängen am Gerät **Pixel**. Bei anderem Namen ändert sich das Pr
 | `sensor.pixel_stress_level` | 0 entspannt, 1 beschäftigt (ab 3 Terminen), 2 gestresst (ab 6) |
 | `sensor.pixel_age`, `sensor.pixel_care_score` | Alter in Tagen, gleitender Pflegewert |
 | `binary_sensor.pixel_needs_attention` | Hunger, Häufchen, krank, ohnmächtig oder Fütterungszeit |
-| `binary_sensor.pixel_sick`, `_poop`, `_sleeping`, `_fainted`, `_feeding_time` | Einzelzustände |
+| `binary_sensor.pixel_sick`, `_poop`, `_sleeping`, `_fainted`, `_feeding_time` | Einzelzustände. `_sleeping` trägt die Attribute `reason` (`night` / `tired` / `manual`), `night_hours` und `energy` |
 | `select.pixel_mood` | Stimmung anzeigen/überschreiben; `auto` = Engine entscheidet |
 | `switch.pixel_animations` | Animationen auf der Card an/aus (Kiosk-Stromsparen) |
 | `switch.pixel_vacation` | Urlaub an/aus: alle Werte eingefroren, keine Erinnerungen, Sonnenhut und Cocktail |
@@ -143,7 +143,7 @@ Alle Services akzeptieren optional `config_entry_id`, falls mehrere Tiere existi
 | `pixel.reset` | `name` | Neues Ei (Statistik bleibt) |
 | `pixel.set_vacation` | `enabled`: true / false | Urlaub beginnen oder beenden (wie `switch.pixel_vacation`) |
 
-**Events:** Die Integration feuert `pixel_event` mit `type` (z. B. `fed`, `hungry`, `poop`, `sick`, `fainted`, `evolved`, `welcome_home`, `appointment_soon`, `feeding_time`, `fell_asleep`, `woke_up`, `mood_changed`, `built`, `build_removed`, `played` mit `build_id`/`build_kind`, `vacation_started`, `vacation_ended`) plus Details. Darauf lassen sich Automationen bauen.
+**Events:** Die Integration feuert `pixel_event` mit `type` (z. B. `fed`, `hungry`, `poop`, `sick`, `fainted`, `evolved`, `welcome_home`, `appointment_soon`, `feeding_time`, `fell_asleep` mit `reason` (`night` / `tired` / `manual`), `woke_up`, `mood_changed`, `built`, `build_removed`, `played` mit `build_id`/`build_kind`, `vacation_started`, `vacation_ended`) plus Details. Darauf lassen sich Automationen bauen.
 
 ## 9. Automationsbeispiele
 
@@ -263,6 +263,7 @@ Die Card respektiert `prefers-reduced-motion` (keine Purzelbäume) und pausiert,
 ## 11. Spielregeln
 
 - **Bedürfnisse** sinken pro Stunde: Sättigung −4, Laune −2, Energie −3 (× Tempo-Faktor). Im Schlaf regeneriert Energie, Sättigung sinkt nur ein Viertel so schnell.
+- **Schlaf:** Nachts schläft Pixel (Schlafens- und Aufstehzeit aus den Einstellungen der Integration, Standard 22:00 bis 06:30, in der Zeitzone des Home-Assistant-Servers). Sinkt die Energie tagsüber unter 15, macht es ein Nickerchen, bis die Energie wieder 40 erreicht (etwa 2 Stunden); Füttern weckt es. `pixel.sleep` / `pixel.wake` greifen manuell ein; nachts schläft es nach dem Wecken beim nächsten Takt wieder ein. Warum es gerade schläft, steht in `binary_sensor.pixel_sleeping` unter `reason`.
 - **Urlaubsschutz:** Ist das Haus länger als 4 Stunden leer, sinken alle Werte nur halb so schnell. Beim Heimkommen freut sich Pixel (+Laune).
 - **Urlaub** (`switch.pixel_vacation` oder `pixel.set_vacation`): Für längere Abwesenheit oder wenn sich gerade niemand kümmern kann. Alle Werte bleiben stehen, es gibt keine Häufchen, keine Erinnerungen, kein Kranksein und kein Bauen; Pixel ist wach (auch nachts), trägt Sonnenhut und Cocktail und hat die Stimmung „Urlaub“. Füttern und Spielen gehen trotzdem. Beim Beenden geht es dort weiter, wo es aufgehört hat, es wird nichts nachgeholt. Ein Tier, das schon krank war, bleibt es bis zur Medizin. Automatisch schaltet den Urlaub nur eine eigene Automation (Beispiel in Abschnitt 9).
 - **Fütterungsfenster:** Innerhalb der Fenster erinnert Pixel einmal (`feeding_time`-Event, Card-Sprechblase). Außerhalb darf trotzdem gefüttert werden.
@@ -287,6 +288,7 @@ Alle Zahlen stehen in `custom_components/pixel/engine/config.py`.
 | Mehrere Pixel gleichzeitig | Auf einer Seite läuft immer nur ein Tier – die erste Card gewinnt. Weitere Cards zeigen nur ihren Status-Chip. |
 | Pixel ist im hellen Theme kaum zu sehen | Ab 0.1.2 passt sich die Card dem Theme an. Bleibt es blass: Browser hart neu laden, damit die neue Card-Version geladen wird. |
 | Pixel verschwindet nach einem Wechsel der View | Ab 0.1.2 behoben. Vorher half nur Neuladen. Prüfen, ob die geladene Card-Version aktuell ist (`/pixel-static/pixel-card.js?v=…`). |
+| Pixel schläft am Tag | `binary_sensor.pixel_sleeping` → Attribut `reason`. `tired`: die Energie war unter 15 (viel gespielt oder Tempo hoch); es wacht bei 40 wieder auf, Füttern weckt sofort. `night` außerhalb der eingestellten Zeiten (`night_hours`): Zeitzone in HA prüfen (Einstellungen → System → Allgemein), die Integration nutzt die Serverzeit. `manual`: eine Automation oder ein Klick hat `pixel.sleep` aufgerufen. Schlafens- und Aufstehzeit: Integration → Konfigurieren → Spielregeln. |
 | Pixel baut nichts | Erstes Objekt frühestens 8 Stunden nach dem ersten Start, danach alle 8 Stunden. Prüfen: `switch.pixel_vacation` aus? In `sensor.pixel_status`: `sleeping`, `sick` und `fainted` false, `stage` nicht `egg`, `happiness` ≥ 60, `energy` ≥ 35? `sensor.pixel_builds` zeigt im Attribut `next_at` den nächsten Versuch (ab 0.2.1) und unter `items`, was schon steht. |
 | Gebautes Objekt steht an einer komischen Stelle | Die waagerechte Lage kommt aus dem Backend und ist auf allen Geräten gleich; die Höhe sucht sich jede Card selbst. Auf ungewöhnlichen Layouts landet es notfalls auf der Bodenlinie. Antippen entfernt es. |
 | Pixel ist verschwunden und kommt nicht wieder | Bis 0.1.2 blieb das Tier hinter einer Karte hängen. Ab 0.1.3 behoben; ein Wächter holt es zusätzlich alle 20 s zurück, falls es doch festhängt. Prüfen, ob die geladene Card-Version aktuell ist. |

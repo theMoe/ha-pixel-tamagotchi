@@ -16,7 +16,7 @@ uv venv .venv --python 3.14
 uv pip install --python .venv/bin/python homeassistant==2026.9.0 -r requirements_test.txt
 
 # Tests
-.venv/bin/python -m pytest                      # alles (50 Engine + 11 Integration)
+.venv/bin/python -m pytest                      # alles (52 Engine + 11 Integration)
 .venv/bin/python -m pytest tests/engine         # nur Engine, braucht kein homeassistant
 .venv/bin/python -m pytest tests/engine/test_rules.py::test_long_outage_is_capped
 .venv/bin/python -m pytest -k outfit
