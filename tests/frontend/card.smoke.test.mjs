@@ -298,6 +298,13 @@ card._brain._loopStep = echterSchritt;
 assert.ok(card._brain.running, "Schleife laeuft nach einer Exception weiter");
 
 // Zustand ändern: schlafen
+// Urlaub: Sonnenhut und Cocktail sind gewoehnliche Outfit-Layer, keine Sonderlogik in der Card.
+card.hass = { ...hass, states: { "sensor.pixel_status": { state: "vacation", attributes: { ...attrs, vacation: true, mood: "vacation", outfit: { hat: "sun_hat", item: "cocktail" } } } } };
+await tick(10);
+assert.ok(overlay.querySelector(".hat-sun_hat.on"), "Sonnenhut im Urlaub");
+assert.ok(overlay.querySelector(".item-cocktail.on"), "Cocktail im Urlaub");
+assert.ok(!overlay.querySelector(".acc-sunglasses.on"), "Sonnenbrille ist im Urlaubsoutfit nicht gesetzt");
+
 card.hass = { ...hass, states: { "sensor.pixel_status": { state: "sleeping", attributes: { ...attrs, sleeping: true, outfit: { hat: "sleep_cap" } } } } };
 await tick(10);
 assert.ok(overlay.querySelector(".hat-sleep_cap.on"), "Schlafmütze");

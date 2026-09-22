@@ -20,6 +20,7 @@ export const IDLE_ACTIONS = [
   { weight: 30, still: false, when: (b, s) => s.mood === "stressed", run: (b) => b._pointAt("calendar", b.t("stressed")) },
   { weight: 25, still: true, when: (b, s) => s.mood === "lonely", run: (b) => b.o.say(b.t("lonely"), 1800) },
   { weight: 25, still: true, when: (b, s) => s.mood === "bored", run: (b) => b.o.say(b.t("bored"), 1800) },
+  { weight: 25, still: true, when: (b, s) => s.mood === "vacation", run: (b) => b.o.say(b.t("vacation"), 1800) },
   { weight: 30, still: true, when: (b, s) => s.media_playing && !reducedMotion(), run: (b) => b._dance() },
   { weight: 8, still: true, when: (b, s) => s.weather === "rainy", run: (b) => b.o.say(b.t("rain"), 1000) },
   { weight: 8, still: true, when: (b, s) => s.weather === "sunny", run: (b) => b.o.say(b.t("sunny"), 1400) },

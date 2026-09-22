@@ -158,7 +158,7 @@ export class Brain {
   /* ---------------- Events vom Bus */
 
   onEvent(type, data) {
-    const simple = ["fed", "overfed", "played", "petted", "grumbled", "cleaned", "healed", "sick", "too_tired", "tummy_ache", "medicine_refused", "revived", "hatched", "died", "fell_asleep", "woke_up", "evolved"];
+    const simple = ["fed", "overfed", "played", "petted", "grumbled", "cleaned", "healed", "sick", "too_tired", "tummy_ache", "medicine_refused", "revived", "hatched", "died", "fell_asleep", "woke_up", "evolved", "vacation_started", "vacation_ended"];
     if (simple.includes(type)) this.o.say(this.t(type), type === "died" ? 4000 : 1800);
     if (type === "petted") this.o.fx("heart", "♥");
     if (type === "welcome_home") this._interrupt(async () => {
