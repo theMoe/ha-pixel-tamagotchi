@@ -151,6 +151,7 @@
           "lonely": "Lonely",
           "hungry": "Hungry",
           "sleeping": "Sleepy",
+          "vacation": "On vacation",
           "sick": "Sick",
           "fainted": "Fainted"
         }
@@ -159,6 +160,9 @@
     "switch": {
       "animations_enabled": {
         "name": "Animations"
+      },
+      "vacation": {
+        "name": "Vacation"
       }
     },
     "button": {
@@ -341,6 +345,20 @@
           "description": "Only needed when several pets exist."
         }
       }
+    },
+    "set_vacation": {
+      "name": "Set vacation",
+      "description": "Pauses all care while nobody is home: nothing decays, no reminders. The pet lounges with sun hat and cocktail.",
+      "fields": {
+        "enabled": {
+          "name": "Vacation",
+          "description": "true starts the vacation, false ends it."
+        },
+        "config_entry_id": {
+          "name": "Pet",
+          "description": "Only needed when several pets exist."
+        }
+      }
     }
   },
   "selector": {
@@ -362,6 +380,7 @@
         "lonely": "Lonely",
         "hungry": "Hungry",
         "sleeping": "Sleepy",
+        "vacation": "On vacation",
         "sick": "Sick"
       }
     }

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -49,7 +49,10 @@ async def setup_integration(hass: HomeAssistant, entry: MockConfigEntry) -> Mock
 
 
 async def test_setup_creates_entities_and_services(hass: HomeAssistant, entry: MockConfigEntry) -> None:
-    await setup_integration(hass, entry)
+    # Feste Tageszeit: nachts (Zeitzone des Test-Kerns) schliefe das Tier und truege die Schlafmuetze.
+    daytime = datetime(2026, 9, 22, 19, 0, tzinfo=UTC)
+    with patch("custom_components.pixel.world.dt_util.utcnow", return_value=daytime):
+        await setup_integration(hass, entry)
     assert entry.state is ConfigEntryState.LOADED
 
     status = hass.states.get("sensor.pixel_status")
@@ -64,6 +67,7 @@ async def test_setup_creates_entities_and_services(hass: HomeAssistant, entry: M
         "binary_sensor.pixel_needs_attention",
         "select.pixel_mood",
         "switch.pixel_animations",
+        "switch.pixel_vacation",
         "button.pixel_feed",
     ):
         assert hass.states.get(entity_id) is not None, entity_id
@@ -81,6 +85,7 @@ async def test_setup_creates_entities_and_services(hass: HomeAssistant, entry: M
         "say",
         "trick",
         "reset",
+        "set_vacation",
     ):
         assert hass.services.has_service(DOMAIN, service)
 
@@ -182,3 +187,22 @@ async def test_unload(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.NOT_LOADED
+
+
+async def test_vacation_switch_and_service(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    await setup_integration(hass, entry)
+    assert hass.states.get("switch.pixel_vacation").state == "off"
+
+    await hass.services.async_call("switch", "turn_on", {"entity_id": "switch.pixel_vacation"}, blocking=True)
+    await hass.async_block_till_done()
+    status = hass.states.get("sensor.pixel_status")
+    assert status.state == "vacation"
+    assert status.attributes["vacation"] is True
+    assert status.attributes["outfit"]["hat"] == "sun_hat"
+    assert hass.states.get("switch.pixel_vacation").state == "on"
+    assert hass.states.get("binary_sensor.pixel_needs_attention").state == "off"
+
+    await hass.services.async_call(DOMAIN, "set_vacation", {"enabled": False}, blocking=True)
+    await hass.async_block_till_done()
+    assert hass.states.get("switch.pixel_vacation").state == "off"
+    assert hass.states.get("sensor.pixel_status").attributes["vacation"] is False

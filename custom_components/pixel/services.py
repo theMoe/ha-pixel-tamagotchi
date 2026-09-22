@@ -19,6 +19,7 @@ from .const import (
     ATTR_CONFIG_ENTRY,
     ATTR_COUNT,
     ATTR_DURATION,
+    ATTR_ENABLED,
     ATTR_MEAL,
     ATTR_MINUTES,
     ATTR_MOOD,
@@ -35,6 +36,7 @@ from .const import (
     SERVICE_RESET,
     SERVICE_SAY,
     SERVICE_SET_MOOD,
+    SERVICE_SET_VACATION,
     SERVICE_SLEEP,
     SERVICE_TRICK,
     SERVICE_WAKE,
@@ -52,6 +54,10 @@ class ServiceSpec:
     name: str
     schema: vol.Schema
     handler: Handler
+
+
+async def _set_vacation(c: PixelCoordinator, call: ServiceCall) -> None:
+    await c.async_act("set_vacation", enabled=bool(call.data[ATTR_ENABLED]))
 
 
 async def _feed(c: PixelCoordinator, call: ServiceCall) -> None:
@@ -128,6 +134,7 @@ def _table() -> list[ServiceSpec]:
             SERVICE_TRICK, vol.Schema({**_BASE, vol.Optional(ATTR_TRICK, default="random"): cv.string}), _trick
         ),
         ServiceSpec(SERVICE_RESET, vol.Schema({**_BASE, vol.Optional(ATTR_NAME): cv.string}), _reset),
+        ServiceSpec(SERVICE_SET_VACATION, vol.Schema({**_BASE, vol.Required(ATTR_ENABLED): cv.boolean}), _set_vacation),
     ]
 
 

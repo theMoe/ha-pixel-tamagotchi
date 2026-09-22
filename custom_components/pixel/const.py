@@ -41,6 +41,7 @@ SERVICE_SAY = "say"
 SERVICE_TRICK = "trick"
 SERVICE_RESET = "reset"
 SERVICE_REMOVE_BUILD = "remove_build"
+SERVICE_SET_VACATION = "set_vacation"
 
 ATTR_MEAL = "meal"
 ATTR_MOOD = "mood"
@@ -51,6 +52,7 @@ ATTR_TRICK = "trick"
 ATTR_NAME = "name"
 ATTR_COUNT = "count"
 ATTR_BUILD_ID = "build_id"
+ATTR_ENABLED = "enabled"
 ATTR_CONFIG_ENTRY = "config_entry_id"
 
 # Frontend

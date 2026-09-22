@@ -151,6 +151,7 @@
           "lonely": "Einsam",
           "hungry": "Hungrig",
           "sleeping": "Schläfrig",
+          "vacation": "Im Urlaub",
           "sick": "Krank",
           "fainted": "Ohnmächtig"
         }
@@ -159,6 +160,9 @@
     "switch": {
       "animations_enabled": {
         "name": "Animationen"
+      },
+      "vacation": {
+        "name": "Urlaub"
       }
     },
     "button": {
@@ -341,6 +345,20 @@
           "description": "Nur nötig, wenn mehrere Tiere existieren."
         }
       }
+    },
+    "set_vacation": {
+      "name": "Urlaub setzen",
+      "description": "Pausiert die Pflege, solange niemand da ist: nichts sinkt, keine Erinnerungen. Das Tier entspannt mit Sonnenhut und Cocktail.",
+      "fields": {
+        "enabled": {
+          "name": "Urlaub",
+          "description": "true beginnt den Urlaub, false beendet ihn."
+        },
+        "config_entry_id": {
+          "name": "Tier",
+          "description": "Nur nötig, wenn mehrere Tiere existieren."
+        }
+      }
     }
   },
   "selector": {
@@ -362,6 +380,7 @@
         "lonely": "Einsam",
         "hungry": "Hungrig",
         "sleeping": "Schläfrig",
+        "vacation": "Im Urlaub",
         "sick": "Krank"
       }
     }

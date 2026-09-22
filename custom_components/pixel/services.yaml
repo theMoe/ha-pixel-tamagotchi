@@ -99,6 +99,7 @@ set_mood:
             - lonely
             - hungry
             - sleeping
+            - vacation
             - sick
           translation_key: mood
     minutes:
@@ -160,6 +161,18 @@ reset:
       required: false
       selector:
         text:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: pixel
+
+set_vacation:
+  fields:
+    enabled:
+      required: true
+      selector:
+        boolean:
     config_entry_id:
       required: false
       selector:
