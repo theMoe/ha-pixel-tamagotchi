@@ -130,7 +130,7 @@ Alle Services akzeptieren optional `config_entry_id`, falls mehrere Tiere existi
 | Service | Felder | Wirkung |
 |---|---|---|
 | `pixel.feed` | `meal`: snack / meal / treat | Füttern (+15 / +35 / +10 Sättigung; Leckerli +15 Laune, max. 3 pro Tag) |
-| `pixel.play` | – | +25 Laune, −8 Energie (unter 20 Energie: zu müde) |
+| `pixel.play` | – | +25 Laune, −8 Energie (unter 20 Energie: zu müde). Steht etwas Gebautes, spielt Pixel damit, bei mehreren Objekten reihum |
 | `pixel.pet` | – | +5 Laune |
 | `pixel.clean` | `count` (optional) | Häufchen entfernen; ohne `count` alle, sonst so viele |
 | `pixel.remove_build` | `build_id` (optional) | Gebautes Objekt abreißen; ohne Angabe das zuletzt gebaute |
@@ -141,7 +141,7 @@ Alle Services akzeptieren optional `config_entry_id`, falls mehrere Tiere existi
 | `pixel.trick` | `trick`: random / tumble / jump / kick / hide / wave | Trick auf dem Dashboard |
 | `pixel.reset` | `name` | Neues Ei (Statistik bleibt) |
 
-**Events:** Die Integration feuert `pixel_event` mit `type` (z. B. `fed`, `hungry`, `poop`, `sick`, `fainted`, `evolved`, `welcome_home`, `appointment_soon`, `feeding_time`, `fell_asleep`, `woke_up`, `mood_changed`, `built`, `build_removed`) plus Details. Darauf lassen sich Automationen bauen.
+**Events:** Die Integration feuert `pixel_event` mit `type` (z. B. `fed`, `hungry`, `poop`, `sick`, `fainted`, `evolved`, `welcome_home`, `appointment_soon`, `feeding_time`, `fell_asleep`, `woke_up`, `mood_changed`, `built`, `build_removed`, `played` mit `build_id`/`build_kind`) plus Details. Darauf lassen sich Automationen bauen.
 
 ## 9. Automationsbeispiele
 

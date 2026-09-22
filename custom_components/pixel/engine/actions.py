@@ -2,15 +2,29 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import timedelta
 
 from .config import GameConfig
-from .models import Activity, GameEvent, Meal, Mood, PetState, WorldContext
+from .models import Activity, Build, GameEvent, Meal, Mood, PetState, WorldContext
 from .rules import clamp
 
 
 class ActionRefused(Exception):
     """Die Aktion ist im aktuellen Zustand nicht möglich (z. B. ohnmächtig)."""
+
+
+def next_in_rotation(items: Sequence[Build], last_id: str) -> Build | None:
+    """Das nächste Objekt reihum, bezogen auf die aktuell vorhandenen.
+
+    Ist das zuletzt bespielte Objekt inzwischen abgerissen, beginnt die Runde vorn;
+    so bleibt nur bespielbar, was auf dem Dashboard auch steht.
+    """
+    if not items:
+        return None
+    ids = [item.id for item in items]
+    index = ids.index(last_id) + 1 if last_id in ids else 0
+    return items[index % len(items)]
 
 
 class PetActions:
@@ -70,7 +84,16 @@ class PetActions:
         s.total_plays += 1
         self._wake_if_needed(s)
         self._set_activity(s, w, Activity.PLAYING, cfg.playing_seconds)
-        return [GameEvent("played", {"happiness": round(s.happiness), "user": user})]
+        build = next_in_rotation(s.builds, s.last_played_build_id)
+        if build is not None:
+            s.last_played_build_id = build.id
+        data = {
+            "happiness": round(s.happiness),
+            "user": user,
+            "build_id": build.id if build else None,
+            "build_kind": build.kind if build else None,
+        }
+        return [GameEvent("played", data)]
 
     def pet(self, s: PetState, w: WorldContext) -> list[GameEvent]:
         self._require_conscious(s)
@@ -196,4 +219,4 @@ class PetActions:
         s.activity_until = w.now + timedelta(seconds=seconds)
 
 
-__all__ = ["ActionRefused", "PetActions"]
+__all__ = ["ActionRefused", "PetActions", "next_in_rotation"]

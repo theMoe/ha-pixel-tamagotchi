@@ -208,6 +208,7 @@ class PetState:
 
     builds: list[Build] = field(default_factory=list)
     build_due_at: datetime | None = None
+    last_played_build_id: str = ""  # Spielen geht reihum durch die Bauten
 
     mood_override: Mood | None = None
     mood_override_until: datetime | None = None

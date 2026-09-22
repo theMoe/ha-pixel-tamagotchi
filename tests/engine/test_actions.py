@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from conftest import advance, make_world
 
-from engine import ActionRefused, Activity, Meal, Mood, WeatherKind
+from engine import ActionRefused, Activity, Build, Meal, Mood, PetState, WeatherKind
 
 
 def types(events):
@@ -195,3 +195,46 @@ def test_set_vacation_is_idempotent_and_wakes(engine):
     ev = engine.act("set_vacation", night, enabled=False)
     assert "vacation_ended" in types(ev)
     assert engine.act("set_vacation", night, enabled=False) == []
+
+
+def _set_builds(engine, world, *ids):
+    engine.state.builds = [
+        Build(id=i, kind="house", rx=0.2 * n, created=world.now.isoformat()) for n, i in enumerate(ids)
+    ]
+
+
+def _play_build(engine, world):
+    engine.state.energy = 90
+    played = next(e for e in engine.play(world) if e.type == "played")
+    return played.data["build_id"]
+
+
+def test_play_rotates_through_builds(engine, world):
+    _set_builds(engine, world, "a", "b", "c")
+    assert [_play_build(engine, world) for _ in range(4)] == ["a", "b", "c", "a"]
+    assert engine.state.last_played_build_id == "a"
+    played = next(e for e in engine.play(world) if e.type == "played")
+    assert played.data["build_kind"] == "house"
+
+
+def test_play_rotation_knows_only_existing_builds(engine, world):
+    """Abgerissene Objekte fallen aus der Runde, egal ob schon bespielt oder nicht."""
+    _set_builds(engine, world, "a", "b", "c")
+    assert _play_build(engine, world) == "a"
+    engine.act("remove_build", world, build_id="c")  # noch nicht bespielt
+    assert _play_build(engine, world) == "b"
+    engine.act("remove_build", world, build_id="b")  # das zuletzt bespielte
+    assert _play_build(engine, world) == "a"
+    engine.act("remove_build", world, build_id="a")
+    assert _play_build(engine, world) is None
+
+
+def test_play_without_builds_has_no_build(engine, world):
+    assert _play_build(engine, world) is None
+    assert engine.state.last_played_build_id == ""
+
+
+def test_state_roundtrip_keeps_last_played(engine, world):
+    _set_builds(engine, world, "a", "b")
+    _play_build(engine, world)
+    assert PetState.from_dict(engine.state.to_dict()).last_played_build_id == "a"

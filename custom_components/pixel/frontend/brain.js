@@ -120,12 +120,15 @@ export class Brain {
     return { x, y };
   }
 
-  /** Geht zu einem gebauten Objekt und beschaeftigt sich damit. */
-  async _visitBuild() {
-    if (!this.builds.length) return this._walkRandom();
+  _buildById(id) {
+    return this.builds.find((b) => b.id === id);
+  }
+
+  /** Geht zu einem gebauten Objekt und beschaeftigt sich damit; ohne Angabe ein zufaelliges. */
+  async _visitBuild(build = pick(this.builds)) {
+    if (!build) return this._walkRandom();
     await this._unhide(false);
     this.f.scan();
-    const build = pick(this.builds);
     const ziel = this._yard.spotOf(build);
     if (!ziel) return this._walkRandom();
     const art = BUILD_KINDS[build.kind] || BUILD_KINDS.house;
@@ -152,7 +155,6 @@ export class Brain {
       await this._unhide(false);
       await wait(1800);
     });
-    if (activity === "playing" && !reducedMotion()) this._interrupt(() => this._trick("tumble"));
   }
 
   /* ---------------- Events vom Bus */
@@ -161,6 +163,11 @@ export class Brain {
     const simple = ["fed", "overfed", "played", "petted", "grumbled", "cleaned", "healed", "sick", "too_tired", "tummy_ache", "medicine_refused", "revived", "hatched", "died", "fell_asleep", "woke_up", "evolved", "vacation_started", "vacation_ended"];
     if (simple.includes(type)) this.o.say(this.t(type), type === "died" ? 4000 : 1800);
     if (type === "petted") this.o.fx("heart", "♥");
+    if (type === "played" && !reducedMotion()) {
+      // Das Backend waehlt das Objekt (reihum, persistiert); die Card fuehrt nur aus.
+      const build = this._buildById(data.build_id);
+      this._interrupt(() => (build ? this._visitBuild(build) : this._trick("tumble")));
+    }
     if (type === "welcome_home") this._interrupt(async () => {
       await this._unhide(false);
       this.o.say(this.t("welcome_home"), 2500);

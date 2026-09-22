@@ -250,6 +250,27 @@ assert.equal(calls.at(-1)[1], "remove_build");
 assert.equal(calls.at(-1)[2].build_id, "b1", "die id des angetippten Objekts");
 assert.equal(objekte().length, 1, "nur das angetippte verschwindet");
 
+// Spielen: das Backend nennt das Objekt im Event, die Card geht hin statt Purzelbaum.
+{
+  let besucht = null;
+  let purzelbaum = 0;
+  const origVisit = card._brain._visitBuild;
+  const origTrick = card._brain._trick;
+  card._brain._visitBuild = async (b) => { besucht = b; };
+  card._brain._trick = async () => { purzelbaum++; };
+  card._brain.busy = false;
+  subscriber({ data: { entry_id: "x", type: "played", build_id: "b2", build_kind: "golf" } });
+  await tick(10);
+  assert.equal(besucht?.id, "b2", "played mit build_id fuehrt zum genannten Objekt");
+  assert.equal(purzelbaum, 0, "kein Purzelbaum, wenn ein Objekt genannt ist");
+  subscriber({ data: { entry_id: "x", type: "played", build_id: null, build_kind: null } });
+  await tick(10);
+  assert.equal(purzelbaum, 1, "ohne Objekt bleibt der Purzelbaum");
+  assert.equal(card._brain.busy, false, "danach wieder frei");
+  card._brain._visitBuild = origVisit;
+  card._brain._trick = origTrick;
+}
+
 // Der Besuch ist eine Datenzeile in der Aktionstabelle, sobald etwas steht.
 card.hass = { ...hass, states: { "sensor.pixel_status": { state: "happy", attributes: { ...attrs, builds: [] } } } };
 await tick(10);
