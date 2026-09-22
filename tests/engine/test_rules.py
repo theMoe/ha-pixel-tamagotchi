@@ -6,7 +6,19 @@ from datetime import timedelta
 
 from conftest import advance, make_world
 
-from engine import Activity, Build, CalendarEvent, GameConfig, Mood, PetEngine, PetState, Stage
+from engine import (
+    PAUSED_ON_VACATION,
+    Activity,
+    Build,
+    CalendarEvent,
+    GameConfig,
+    Mood,
+    PetEngine,
+    PetState,
+    Stage,
+    default_rules,
+    vacation_rules,
+)
 
 
 def events_of(events, kind):
@@ -191,6 +203,8 @@ def test_from_dict_tolerates_unknown_and_missing_fields():
     assert s.hunger == 12
     assert s.mood_override is None
     assert s.stage is Stage.EGG
+    assert s.vacation is False
+    assert PetState.from_dict({"vacation": True}).vacation is True
 
 
 def test_build_appears_when_happy(engine, world):
@@ -265,3 +279,51 @@ def test_state_roundtrip_with_builds(engine, world):
     assert restored.to_dict() == data
     assert restored.builds[0].kind == "house"
     assert restored.builds[0].rx == 0.25
+
+
+def test_vacation_rules_are_the_same_instances_minus_paused():
+    """Der Urlaub filtert die Liste, ersetzt aber keine Instanzen (regelinterne Merker)."""
+    rules = default_rules()
+    subset = vacation_rules(rules)
+    assert subset, "im Urlaub laeuft noch etwas"
+    assert not any(isinstance(r, PAUSED_ON_VACATION) for r in subset)
+    assert all(any(r is orig for orig in rules) for r in subset)
+    assert len(subset) == len(rules) - len(PAUSED_ON_VACATION)
+
+
+def test_vacation_freezes_needs_and_reminders(engine, world):
+    """Im Urlaub aendert sich nichts, es wird nicht geschlafen, nichts gemeldet, nichts gebaut."""
+    engine.feed(world)  # setzt poop_due_at
+    engine.act("set_vacation", world, enabled=True)
+    assert engine.state.mood is Mood.VACATION
+    frozen = (
+        engine.state.hunger,
+        engine.state.happiness,
+        engine.state.energy,
+        engine.state.health,
+        engine.state.poop_count,
+        len(engine.state.builds),
+    )
+    forbidden = {"hungry", "feeding_time", "poop", "sick", "built", "fell_asleep", "appointment_soon"}
+    w = world
+    for _ in range(30):  # ueber Fuetterungsfenster und eine ganze Nacht hinweg
+        w = advance(w, hours=1)
+        ev = engine.tick(w)
+        assert not forbidden & {e.type for e in ev}, ev
+        assert not engine.state.sleeping, "Urlaubstier ist wach, auch nachts"
+    assert (
+        engine.state.hunger,
+        engine.state.happiness,
+        engine.state.energy,
+        engine.state.health,
+        engine.state.poop_count,
+        len(engine.state.builds),
+    ) == frozen
+    assert engine.state.outfit.as_dict() == {"hat": "sun_hat", "accessory": "", "item": "cocktail"}
+    assert not engine.needs_attention(w)
+
+    # Urlaub zu Ende: das ausstehende Haeufchen kommt, es wurde nur eingefroren, nicht verworfen.
+    ev = engine.act("set_vacation", w, enabled=False)
+    assert "vacation_ended" in {e.type for e in ev}
+    ev = engine.tick(advance(w, minutes=1))
+    assert events_of(ev, "poop")

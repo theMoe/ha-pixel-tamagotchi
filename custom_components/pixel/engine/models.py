@@ -23,6 +23,7 @@ class Mood(StrEnum):
     FAINTED = "fainted"
     SICK = "sick"
     SLEEPING = "sleeping"
+    VACATION = "vacation"
     HUNGRY = "hungry"
     STRESSED = "stressed"
     LONELY = "lonely"
@@ -224,6 +225,7 @@ class PetState:
     feeds_by_user: dict[str, int] = field(default_factory=dict)
 
     animations_enabled: bool = True
+    vacation: bool = False  # Urlaub: Pflege pausiert, siehe rules.PAUSED_ON_VACATION
 
     # ---------------------------------------------------------------- Ableitungen
 

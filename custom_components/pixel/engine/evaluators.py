@@ -24,6 +24,8 @@ class MoodEvaluator:
             return Mood.SICK
         if state.sleeping:
             return Mood.SLEEPING
+        if state.vacation:
+            return Mood.VACATION
         if state.hunger < cfg.hungry_threshold:
             return Mood.HUNGRY
         if world.appointments_24h >= cfg.stress_high_appointments:
@@ -59,6 +61,10 @@ class OutfitResolver:
             return outfit
         if state.fainted or state.is_sick:
             outfit.accessory = "thermometer"
+            return outfit
+        if state.vacation:
+            outfit.hat = "sun_hat"
+            outfit.item = "cocktail"
             return outfit
 
         self._apply_weather(outfit, world)

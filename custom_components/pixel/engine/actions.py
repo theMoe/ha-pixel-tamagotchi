@@ -148,9 +148,31 @@ class PetActions:
         s.mood_override_until = w.now + timedelta(minutes=minutes or self._cfg.mood_override_minutes)
         return [GameEvent("mood_override", {"mood": str(mood), "minutes": minutes or self._cfg.mood_override_minutes})]
 
+    # ------------------------------------------------------------------ Urlaub
+
+    def set_vacation(self, s: PetState, w: WorldContext, enabled: bool) -> list[GameEvent]:
+        """Urlaub an/aus. Im Urlaub pausiert die Pflege (siehe ``rules.PAUSED_ON_VACATION``).
+
+        Beim Einschalten wird ein schlafendes Tier geweckt: die Schlafregel pausiert
+        ebenfalls, ein Urlaubstier ist wach, auch nachts. Idempotent.
+        """
+        if s.vacation == enabled:
+            return []
+        events: list[GameEvent] = []
+        s.vacation = enabled
+        if enabled and s.sleeping:
+            s.sleeping = False
+            s.sleeping_manual = None
+            events.append(GameEvent("woke_up", {"manual": False}))
+        events.append(GameEvent("vacation_started" if enabled else "vacation_ended", {}))
+        return events
+
+    # ------------------------------------------------------------------ Neustart
+
     def reset(self, s: PetState, w: WorldContext, name: str | None = None) -> list[GameEvent]:
         fresh = PetState(name=name or s.name, generation=s.generation + 1, born_at=w.now, last_tick=w.now)
         fresh.animations_enabled = s.animations_enabled
+        fresh.vacation = s.vacation
         for key, value in fresh.__dict__.items():
             setattr(s, key, value)
         return [GameEvent("hatched", {"generation": s.generation})]

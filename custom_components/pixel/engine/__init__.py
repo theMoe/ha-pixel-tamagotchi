@@ -19,8 +19,10 @@ from .models import (
     WorldContext,
     utcnow,
 )
+from .rules import PAUSED_ON_VACATION, default_rules, vacation_rules
 
 __all__ = [
+    "PAUSED_ON_VACATION",
     "ActionRefused",
     "Activity",
     "Build",
@@ -41,5 +43,7 @@ __all__ = [
     "StressEvaluator",
     "WeatherKind",
     "WorldContext",
+    "default_rules",
     "utcnow",
+    "vacation_rules",
 ]

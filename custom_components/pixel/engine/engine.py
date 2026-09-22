@@ -9,7 +9,7 @@ from .actions import PetActions
 from .config import GameConfig
 from .evaluators import MoodEvaluator, OutfitResolver, StressEvaluator
 from .models import Activity, GameEvent, Meal, Mood, PetState, WorldContext
-from .rules import Rule, TickContext, default_rules
+from .rules import Rule, TickContext, default_rules, vacation_rules
 
 MAX_TICK_HOURS = 12.0  # Nach längerem Ausfall (Update, Stromausfall) nicht "nachholen" bis zum Tod
 
@@ -31,6 +31,7 @@ class PetEngine:
         self.state = state
         self.cfg = cfg
         self._rules: list[Rule] = list(rules) if rules is not None else default_rules()
+        self._vacation_rules: list[Rule] = vacation_rules(self._rules)
         self._actions = actions or PetActions(cfg)
         self._mood = MoodEvaluator()
         self._outfit = OutfitResolver()
@@ -45,7 +46,9 @@ class PetEngine:
         dt_hours = max(0.0, (world.now - s.last_tick).total_seconds() / 3600)
         dt_hours = min(dt_hours, MAX_TICK_HOURS)
         ctx = TickContext(state=s, world=world, cfg=self.cfg, dt_hours=dt_hours)
-        for rule in self._rules:
+        # Im Urlaub läuft nur die Teilmenge; last_tick zieht trotzdem mit, damit nach
+        # dem Urlaub nichts "nachgeholt" wird: eingefroren, nicht aufgeschoben.
+        for rule in self._vacation_rules if s.vacation else self._rules:
             rule.apply(ctx)
         s.last_tick = world.now
         self._derive(world, ctx.events)
@@ -91,6 +94,8 @@ class PetEngine:
     def needs_attention(self, world: WorldContext | None = None) -> bool:
         s, cfg = self.state, self.cfg
         w = world or self._last_world
+        if s.vacation:
+            return s.fainted
         in_window = bool(w and cfg.in_feeding_window(w.local_now.time()))
         return bool(
             s.fainted
@@ -128,6 +133,7 @@ class PetEngine:
             "last_fed": s.last_fed.isoformat() if s.last_fed else None,
             "mood_override": str(s.mood_override) if s.mood_override else None,
             "animations_enabled": s.animations_enabled,
+            "vacation": s.vacation,
         }
         if w is not None:
             data.update(

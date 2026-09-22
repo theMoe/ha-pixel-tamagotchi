@@ -6,6 +6,7 @@ Neue Mechaniken werden als weitere Regel-Klasse ergänzt und in
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Protocol
@@ -381,4 +382,33 @@ def default_rules() -> list[Rule]:
     ]
 
 
-__all__ = ["Mood", "Rule", "TickContext", "clamp", "default_rules"]
+# Regeln, die im Urlaub pausieren. Die Regeln selbst wissen nichts vom Urlaub;
+# die Engine wählt nur eine kleinere Liste. Pausiert wird alles, was Pflege
+# verlangt oder bestraft: Bedürfnisse (NeedsDecay, Poop, Health, CareScore),
+# Erinnerungen (HungerEvent, FeedingReminder, Appointment), Bauen (BuildRule)
+# und der Schlaf (SleepRule): mit eingefrorener Energie würde ein Tier unter der
+# Ausgeschlafen-Schwelle nie mehr aufwachen. Weiter laufen Tagesreset,
+# Anwesenheit (grosses "welcome_home" nach der Reise), Wachstum und die Ablaufregeln.
+PAUSED_ON_VACATION: tuple[type, ...] = (
+    SleepRule,
+    NeedsDecayRule,
+    HungerEventRule,
+    PoopRule,
+    HealthRule,
+    CareScoreRule,
+    BuildRule,
+    AppointmentRule,
+    FeedingReminderRule,
+)
+
+
+def vacation_rules(rules: Iterable[Rule]) -> list[Rule]:
+    """Teilmenge derselben Regelinstanzen, die im Urlaub weiterläuft.
+
+    Es werden bewusst dieselben Objekte zurückgegeben, damit regelinterne
+    Merker (z. B. ``HungerEventRule._was_hungry``) den Urlaub überdauern.
+    """
+    return [rule for rule in rules if not isinstance(rule, PAUSED_ON_VACATION)]
+
+
+__all__ = ["PAUSED_ON_VACATION", "Mood", "Rule", "TickContext", "clamp", "default_rules", "vacation_rules"]

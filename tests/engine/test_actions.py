@@ -173,5 +173,25 @@ def test_weather_outfits(engine, weather, temp, expected):
 
 def test_snapshot_contains_card_relevant_fields(engine, world):
     snap = engine.snapshot(world)
-    for key in ("mood", "activity", "outfit", "hunger", "stress_level", "needs_attention", "feeding_window"):
+    keys = ("mood", "activity", "outfit", "hunger", "stress_level", "needs_attention", "feeding_window", "vacation")
+    for key in keys:
         assert key in snap
+
+
+def test_set_vacation_is_idempotent_and_wakes(engine):
+    night = make_world(hour=23)
+    engine.state.last_tick = night.now
+    engine.tick(night)
+    assert engine.state.sleeping
+    ev = engine.act("set_vacation", night, enabled=True)
+    assert types(ev)[:2] == ["woke_up", "vacation_started"]
+    assert not engine.state.sleeping
+    assert engine.state.mood is Mood.VACATION
+    assert engine.state.outfit.hat == "sun_hat"
+    assert engine.act("set_vacation", night, enabled=True) == []
+    # Der Neustart eines Eis darf den Schalter nicht still umlegen.
+    engine.act("reset", night)
+    assert engine.state.vacation is True
+    ev = engine.act("set_vacation", night, enabled=False)
+    assert "vacation_ended" in types(ev)
+    assert engine.act("set_vacation", night, enabled=False) == []
