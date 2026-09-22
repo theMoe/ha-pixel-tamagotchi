@@ -121,6 +121,7 @@ Alle Entities hängen am Gerät **Pixel**. Bei anderem Namen ändert sich das Pr
 | `binary_sensor.pixel_sick`, `_poop`, `_sleeping`, `_fainted`, `_feeding_time` | Einzelzustände |
 | `select.pixel_mood` | Stimmung anzeigen/überschreiben; `auto` = Engine entscheidet |
 | `switch.pixel_animations` | Animationen auf der Card an/aus (Kiosk-Stromsparen) |
+| `switch.pixel_vacation` | Urlaub an/aus: alle Werte eingefroren, keine Erinnerungen, Sonnenhut und Cocktail |
 | `button.pixel_feed`, `_snack`, `_treat`, `_play`, `_pet`, `_clean`, `_medicine` | Aktionen ohne Card |
 
 ## 8. Services
@@ -140,8 +141,9 @@ Alle Services akzeptieren optional `config_entry_id`, falls mehrere Tiere existi
 | `pixel.say` | `text`, `duration` | Sprechblase auf dem Dashboard |
 | `pixel.trick` | `trick`: random / tumble / jump / kick / hide / wave | Trick auf dem Dashboard |
 | `pixel.reset` | `name` | Neues Ei (Statistik bleibt) |
+| `pixel.set_vacation` | `enabled`: true / false | Urlaub beginnen oder beenden (wie `switch.pixel_vacation`) |
 
-**Events:** Die Integration feuert `pixel_event` mit `type` (z. B. `fed`, `hungry`, `poop`, `sick`, `fainted`, `evolved`, `welcome_home`, `appointment_soon`, `feeding_time`, `fell_asleep`, `woke_up`, `mood_changed`, `built`, `build_removed`, `played` mit `build_id`/`build_kind`) plus Details. Darauf lassen sich Automationen bauen.
+**Events:** Die Integration feuert `pixel_event` mit `type` (z. B. `fed`, `hungry`, `poop`, `sick`, `fainted`, `evolved`, `welcome_home`, `appointment_soon`, `feeding_time`, `fell_asleep`, `woke_up`, `mood_changed`, `built`, `build_removed`, `played` mit `build_id`/`build_kind`, `vacation_started`, `vacation_ended`) plus Details. Darauf lassen sich Automationen bauen.
 
 ## 9. Automationsbeispiele
 
@@ -173,6 +175,19 @@ actions:
   - action: "switch.turn_{{ 'on' if trigger.to_state.state == 'on' else 'off' }}"
     target:
       entity_id: switch.pixel_animations
+```
+
+**Urlaub automatisch, wenn die Familie verreist ist:**
+
+```yaml
+alias: Pixel Urlaubsmodus
+triggers:
+  - trigger: state
+    entity_id: input_boolean.familie_verreist
+actions:
+  - action: pixel.set_vacation
+    data:
+      enabled: "{{ trigger.to_state.state == 'on' }}"
 ```
 
 **Waschmaschine fertig → Pixel sagt es:**
@@ -249,6 +264,7 @@ Die Card respektiert `prefers-reduced-motion` (keine Purzelbäume) und pausiert,
 
 - **Bedürfnisse** sinken pro Stunde: Sättigung −4, Laune −2, Energie −3 (× Tempo-Faktor). Im Schlaf regeneriert Energie, Sättigung sinkt nur ein Viertel so schnell.
 - **Urlaubsschutz:** Ist das Haus länger als 4 Stunden leer, sinken alle Werte nur halb so schnell. Beim Heimkommen freut sich Pixel (+Laune).
+- **Urlaub** (`switch.pixel_vacation` oder `pixel.set_vacation`): Für längere Abwesenheit oder wenn sich gerade niemand kümmern kann. Alle Werte bleiben stehen, es gibt keine Häufchen, keine Erinnerungen, kein Kranksein und kein Bauen; Pixel ist wach (auch nachts), trägt Sonnenhut und Cocktail und hat die Stimmung „Urlaub“. Füttern und Spielen gehen trotzdem. Beim Beenden geht es dort weiter, wo es aufgehört hat, es wird nichts nachgeholt. Ein Tier, das schon krank war, bleibt es bis zur Medizin. Automatisch schaltet den Urlaub nur eine eigene Automation (Beispiel in Abschnitt 9).
 - **Fütterungsfenster:** Innerhalb der Fenster erinnert Pixel einmal (`feeding_time`-Event, Card-Sprechblase). Außerhalb darf trotzdem gefüttert werden.
 - **Häufchen** kommt 2 Stunden nach einer Mahlzeit und kostet Gesundheit, bis es weggeputzt ist.
 - **Gesundheit** sinkt bei Sättigung < 15 oder Häufchen; unter 30 ist Pixel **krank** (Medizin oder Erholung), bei 0 **ohnmächtig** (Medizin, dann füttern). Hardcore: stattdessen Tod und neues Ei.
@@ -256,6 +272,7 @@ Die Card respektiert `prefers-reduced-motion` (keine Purzelbäume) und pausiert,
 - **Stimmung** (Priorität): ohnmächtig › krank › schlafend › hungrig (< 30) › gestresst (≥ 6 Termine) › einsam (Haus > 4 h leer und Laune < 40) › aufgeregt (jemand kommt heim, spielt) › beschäftigt (≥ 3 Termine) › gelangweilt (> 6 h keine Interaktion) › fröhlich.
 - **Outfit:** Sonne → Sonnenbrille (+Eis ab 26 °C, +Mütze unter 8 °C); Regen/Gewitter → Schirm; Schnee → Mütze und Schal; Wind → Schal; Nebel → Laterne; 3–5 Termine → Klemmbrett; ab 6 → Kaffee; Dezember → Nikolausmütze; Ende Oktober → Kürbis; März/April am Wochenende → Hasenohren.
 - **Bauen:** Alle 8 Stunden baut Pixel etwas, wenn es wach, gesund, gut gelaunt (≥ 60) und ausgeruht (≥ 35) ist – Haus, Golfloch, Schaukel oder Blumenbeet, im Winter einen Schneemann. Höchstens vier Objekte gleichzeitig. Ein Tipp auf ein Objekt reißt es ab (−3 Laune). Solange etwas steht, geht Pixel immer mal wieder hin und beschäftigt sich damit.
+- **Spielen mit Bauten:** Steht etwas Gebautes, spielt Pixel bei „Spielen“ damit, bei mehreren Objekten reihum; abgerissene Objekte fallen aus der Runde. Beim Golfloch läuft Pixel irgendwo hin zum Abschlag und braucht ein bis drei Schläge, geht zwischendurch zum Ball und versenkt ihn zum Schluss.
 - **Ausfälle:** Nach Neustarts oder Stromausfall werden höchstens 12 Stunden nachgerechnet – Pixel verhungert nicht, weil HA ein Wochenende aus war.
 
 Alle Zahlen stehen in `custom_components/pixel/engine/config.py`.

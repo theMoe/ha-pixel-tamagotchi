@@ -16,7 +16,7 @@ uv venv .venv --python 3.14
 uv pip install --python .venv/bin/python homeassistant==2026.9.0 -r requirements_test.txt
 
 # Tests
-.venv/bin/python -m pytest                      # alles (34 Engine + 10 Integration)
+.venv/bin/python -m pytest                      # alles (49 Engine + 11 Integration)
 .venv/bin/python -m pytest tests/engine         # nur Engine, braucht kein homeassistant
 .venv/bin/python -m pytest tests/engine/test_rules.py::test_long_outage_is_capped
 .venv/bin/python -m pytest -k outfit
@@ -60,7 +60,7 @@ Modulrollen:
 |---|---|
 | `engine/engine.py` | einzige Fassade: `tick()` / `act()` / `snapshot()`. `act` löst Aktionsnamen per `getattr` auf, damit die Service-Schicht generisch bleibt |
 | `engine/config.py` | `GameConfig` — **alle** Balancing-Zahlen, sonst nirgends |
-| `engine/rules.py` | 13 Regelklassen; die Reihenfolge in `default_rules()` ist semantisch |
+| `engine/rules.py` | 14 Regelklassen; die Reihenfolge in `default_rules()` ist semantisch. `PAUSED_ON_VACATION` + `vacation_rules()` bilden die Teilmenge, die im Urlaub läuft; die Regeln selbst wissen nichts vom Urlaub |
 | `engine/models.py` | `PetState` (persistiert), `WorldContext` (Eingabe), `GameEvent`, Enums |
 | `settings.py` | ConfigEntry → `PixelSettings` (+ abgeleitete `GameConfig`); Options schlagen Data |
 | `world.py` | einziges Modul, das die HA-Weltdarstellung kennt (Wetter-Map, `calendar.get_events` mit 5-min-Cache, `zone.home`, media_player) |
@@ -75,6 +75,7 @@ Modulrollen:
 - **Balancing nur** in `engine/config.py` ändern; Nutzeroptionen darüber in `settings.py` mappen.
 - **Neue Entity** = vier Dateien: Plattformmodul, `strings.json`, `translations/en.json`, `translations/de.json` (Schlüsselmengen identisch halten). `description.key` ist zugleich `translation_key` und Suffix von `unique_id = f"{entry_id}_{key}"`; Entity-IDs folgen den **englischen** Namen.
 - **Neuer Service** = Zeile in `_table()` (`services.py`) + Block in `services.yaml` + Übersetzungen.
+- **Neuer Schalter** = Zeile in `SWITCHES` (`switch.py`) mit `is_on_fn` (Snapshot-Zugriff) und `set_fn` (Coordinator-Setter oder `async_act`). Persistiertes Spielverhalten (wie Urlaub) läuft als Engine-Aktion, damit Persistenz und Events denselben Weg nehmen.
 - **Neues Event** = emitten in `rules.py`/`actions.py` → in `pixel-card.js` unter `Brain.onEvent` behandeln → Events-Liste in `README.md` ergänzen.
 - **Neues Outfit-Teil** = `OutfitResolver` + SVG-Layer `hat-*`/`acc-*`/`item-*` im `RIG_SVG` + Fall in `tests/engine/test_actions.py::test_weather_outfits`.
 - Ruff: line-length 120, Regelsatz `E F I UP B SIM RUF ANN`, `target-version = py312`. **Kein Gedankenstrich in `.py`** (RUF002).
@@ -89,6 +90,8 @@ Modulrollen:
 - **Optionen werden heiß übernommen:** `apply_settings` baut eine neue `PetEngine` um den bestehenden `PetState` (`coordinator.py`). Das Tier überlebt, aber tick-übergreifende In-Memory-Flags einzelner Regeln (`HungerEventRule._was_hungry`, `FeedingReminderRule._reminded_window`) werden dabei zurückgesetzt.
 - **Persistenz:** Nur `PetState` wird gespeichert, nur über `PetStore`. Wer State außerhalb einer Regel oder Aktion ändert, muss selbst speichern lassen (Vorbild: `set_animations_enabled`). Neue Feldtypen mit `_DATETIME_FIELDS` / `_ENUM_FIELDS` in `models.py` synchron halten; es gibt keine Store-Migration, `from_dict` ist bewusst tolerant.
 - **`MAX_TICK_HOURS = 12`** (`engine/engine.py`) kappt das Nachrechnen nach Ausfällen. Tests mit großen Zeitsprüngen laufen dagegen.
+- **Neue `Mood`-/`Activity`-Werte nie ans Ende hängen:** `from_dict` fällt bei unbekannten gespeicherten Werten auf das letzte Enum-Mitglied zurück. Neue Stimmungen zusätzlich in `services.yaml` (`set_mood`-Selector) und in allen drei Übersetzungen (`entity.select.mood.state`, `selector.mood.options`) eintragen.
+- **Golf-Schlagplanung liegt in `frontend/golf.js`** als reine Funktion (`planStrokes`), nicht im Brain; die Abschlagdistanz ist durch `TEE_MAX` begrenzt, damit die ganze Runde unter der 30-s-Watchdog-Grenze bleibt.
 - **Test-Matrix:** `pytest-homeassistant-custom-component` muss exakt zur HA-Version passen; die geprüften Kombinationen stehen als Kommentar in `requirements_test.txt`. `home-assistant-frontend` wird zusätzlich gebraucht.
 - **Overlay-Technik** (bewusste Entscheidung, siehe `PROJEKTSTAND.md` Abschnitt 3): Das Tier hängt am `document.body` mit `position: fixed`; "Verstecken hinter Karten" ist `clip-path: inset(...)`, kein echtes DOM-Einfügen. Karten-Scan per `deepQueryAll` durch alle Shadow Roots. Ein Tier pro Seite (`window.__pixelOverlayOwner`).
 - **jsdom-Test stubbt `getBoundingClientRect`** — Layout- und Clip-Fragen sind damit nicht abgedeckt. Dafür `docs/card-demo.html` im Browser öffnen — **über HTTP, nicht über `file://`**: die Card besteht aus ES-Modulen, und Browser holen Modul-Skripte per CORS, wobei `file://` den Origin `null` hat. Also `python3 -m http.server 8000` im Projektverzeichnis, dann `http://localhost:8000/docs/card-demo.html`.

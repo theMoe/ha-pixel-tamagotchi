@@ -1,14 +1,14 @@
 # PROJEKTSTAND – Pixel, Dashboard-Tamagotchi für Home Assistant
 
 > Briefing für die nächste Session. Zuerst lesen, dann `README.md` für Nutzersicht, `docs/KONZEPT.md` für die Idee.
-> Stand: 16.09.2026 · Version 0.1.4 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
+> Stand: 22.09.2026 · Version 0.2.0 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
 
 ## 1. Was ist das
 
 Ein Tamagotchi, das als Overlay über ein HA-Dashboard läuft, sich hinter Karten versteckt und auf den Zustand des Hauses reagiert (Wetter → Outfit, Kalender → Stress, Anwesenheit → Einsamkeit/Freude, Musik → Tanzen). Zwei Schichten:
 
 - **Integration** `custom_components/pixel` (Python): Spiellogik, Entities, Services, Persistenz, Event-Bus, liefert die Card aus.
-- **Card** `custom_components/pixel/frontend/pixel-card.js` (Vanilla Web Component, kein Build, kein CDN): Rendering, Bewegung, Verstecken, Interaktion.
+- **Card** `custom_components/pixel/frontend/` (Vanilla Web Component als ES-Module, kein Build, kein CDN; Einstieg `pixel-card.js`): Rendering, Bewegung, Verstecken, Interaktion, Bauten und Golf (`builds.js`, `golf.js`).
 
 Zielumgebung des Nutzers: wandmontiertes Touch-Display (Raspberry Pi 4, Kiosk) mit Familien-Dashboard (Kalender, Personen-Karten, `browser_mod`, `custom:button-card`), Home Assistant mit Sonos, Apple-Home-Anwesenheit, Fenstersensoren.
 
@@ -21,7 +21,7 @@ custom_components/pixel/
     config.py             GameConfig: ALLE Balancing-Zahlen, FeedingWindow
     rules.py              Tick-Regeln, je eine Klasse; Reihenfolge in default_rules()
     evaluators.py         MoodEvaluator (Prioritätsliste), OutfitResolver, StressEvaluator
-    actions.py            PetActions: feed/play/pet/clean/medicine/sleep/wake/set_mood/reset
+    actions.py            PetActions: feed/play/pet/clean/remove_build/medicine/sleep/wake/set_mood/set_vacation/reset; next_in_rotation (Spielen reihum)
     engine.py             PetEngine-Fassade: tick(), act(), snapshot()  ← einziger Einstieg
   settings.py             ConfigEntry → PixelSettings (+GameConfig); parst Fütterungsfenster
   world.py                WorldAdapter: HA-States → WorldContext (Wetter-Map, calendar.get_events mit 5-min-Cache, zone.home, media_player)
@@ -35,8 +35,8 @@ custom_components/pixel/
   translations/de.json, en.json, strings.json   (Schlüssel identisch, geprüft)
   services.yaml, manifest.json
 tests/
-  engine/                 34 Tests, reine Python, kein HA nötig (conftest hängt engine/ in sys.path)
-  test_integration.py     10 Tests mit pytest-homeassistant-custom-component (Setup, Services, Reload, Optionen)
+  engine/                 49 Tests, reine Python, kein HA nötig (conftest hängt engine/ in sys.path)
+  test_integration.py     11 Tests mit pytest-homeassistant-custom-component (Setup, Services, Reload, Optionen, Urlaub)
   frontend/card.smoke.test.mjs   jsdom-Smoke-Test der Card (Mount, Scan, Menü, Events, Verstecken, Unmount)
 docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card + Mock-hass)
 ```
@@ -65,6 +65,9 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 15. **Card als ES-Module, weiter ohne Build-Schritt.** `add_extra_js_url` ohne `es5`-Flag legt die URL unter `DATA_EXTRA_MODULE_URL` ab, HA rendert also `<script type="module">`; relative Imports funktionieren damit nativ. `StaticPathConfig` registriert das **Verzeichnis**, neue Module werden ohne Zutun ausgeliefert. Cachebusting über ein **versioniertes Pfadsegment** (`/pixel-static/<version>/`) statt `?v=`: ein relativer Specifier erbt die Query nicht, sonst wären die Untermodule ungebustet geblieben. Die Version steht weiterhin nur in `const.py`.
 16. **Idle-Verhalten als gewichtete Tabelle** (`idle.js`) statt einer if-Kaskade auf einer geteilten Zufallszahl. Jedes Gewicht ist ein echter Anteil, jede Zeile trägt `still`, und eine neue Aktion ist eine Datenzeile. Verweilen ist eine **Entscheidung** (`_dwellUntil`), keine verlängerte Schleifenpause — die Watchdog-Grenze `idle_max_seconds * 3000` verbietet Letzteres.
 17. **Gebaute Objekte: waagerecht zentral, senkrecht lokal.** Das Backend speichert `rx` (0..1), jede Card sucht sich die Höhe aus ihrem eigenen Kartenlayout. Das Objekt steht damit überall an derselben relativen Stelle und überlebt jedes Neuladen, sitzt aber trotzdem auf einer sinnvollen Fläche. `BUILD_KINDS` in `builds.js` ist die einzige Wahrheit je Art — eine neue Art ist eine Zeile plus ein SVG.
+18. **Urlaub ist ein Regelfilter, kein Regel-Flag.** `PetState.vacation` lässt die Engine pro Tick nur `vacation_rules()` laufen (dieselben Instanzen minus `PAUSED_ON_VACATION`); keine Regel kennt den Urlaub. `last_tick` läuft weiter, es wird eingefroren, nicht aufgeschoben (ein anstehendes Häufchen kommt nach dem Urlaub trotzdem). Der Schlaf pausiert mit, weil ein Tier mit eingefrorener Energie unter der Ausgeschlafen-Schwelle nie mehr aufwachen würde; das Urlaubstier ist wach, auch nachts. Nur manuell (Schalter/Service), Automatik gehört in eine HA-Automation. Verworfen: `if s.vacation` in acht Regeln (Shotgun-Surgery) und ein Zeitstopp über `last_tick` (dann käme nach dem Urlaub eine 12-h-Nachrechnung).
+19. **Spielen reihum wird im Backend entschieden.** `play` wählt per `next_in_rotation` das nächste Objekt aus den *aktuell vorhandenen* und persistiert `last_played_build_id`; die Card reagiert auf das `played`-Event (`build_id`), nicht auf den Activity-Wechsel. Grund: gleiche Reihenfolge auf allen Clients und nach Neustart, und nur ein Auslöser für die Animation (Coordinator feuert das Event vor dem Snapshot, ein zweiter Auslöser über `activity` verlöre ohnehin gegen `busy`).
+20. **Golf-Schlagplanung als reine Funktion** (`golf.js: planStrokes`) mit injizierbarem Zufall, im Smoke-Test abgedeckt. Das Brain macht nur Wege und Animation: Abschlag auf der Seite mit mehr Platz, jeder Ball landet auf einer Standfläche (`_surfaceY`, aus `_buildSpot` herausgezogen), ein einziger Ball im `BuildYard`, `TEE_MAX = 500` hält die Runde unter der Watchdog-Grenze (Worst Case ≈ 21 s bei 30 s Limit).
 
 ## 4. Konventionen
 
@@ -80,10 +83,10 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 
 | Bereich | Status |
 |---|---|
-| Engine | 42 Tests grün. Balancing plausibel, aber **nicht im Alltag erprobt** (Zahlen ggf. nach 1–2 Wochen nachjustieren). |
-| Integration | 10 Tests grün gegen **HA 2026.9.0 und 2026.8.3 (Python 3.14)** sowie 2025.1.4 (Python 3.12); keine Deprecation-Hinweise zu `custom_components.pixel`. Ruff sauber unter 3.14. **Nicht auf einer Live-Instanz gestartet.** |
+| Engine | 49 Tests grün. Balancing plausibel, aber **nicht im Alltag erprobt** (Zahlen ggf. nach 1–2 Wochen nachjustieren). |
+| Integration | 11 Tests grün gegen **HA 2026.9.0 und 2026.8.3 (Python 3.14)** sowie 2025.1.4 (Python 3.12); keine Deprecation-Hinweise zu `custom_components.pixel`. Ruff sauber unter 3.14. **Nicht auf einer Live-Instanz gestartet.** |
 | Config-Flow | Programmatisch geprüft (Import, Schema). UI-Durchlauf nicht getestet. |
-| Card | jsdom-Smoke-Test grün, `node --check` sauber, Demo-Seite vorhanden. **Im echten HA-Frontend noch nie gelaufen**, aber gegen ein reales Dashboard-YAML (Sections-View, fixe Navigations-Card, Wallpanel-Kiosk, durchweg Custom Cards) durchgesehen – die Befunde daraus sind in 0.1.2 eingearbeitet. **Die Farbwerte des hellen Themes sind rechnerisch gewählt und noch nicht im Browser beurteilt** → `docs/card-demo.html` öffnen, Umschalter „hell/dunkel“ × Stufe „egg“. Verbleibendes Restrisiko: Touch-Verhalten auf dem Pi-Kiosk, Erkennung ungewöhnlicher fixer Leisten, `position: fixed` des Overlays, falls Wallpanel `transform`/`filter` auf `body` setzt (das würde die Koordinaten verschieben). |
+| Card | jsdom-Smoke-Test grün, `node --check` sauber, Demo-Seite vorhanden. **Im echten HA-Frontend noch nie gelaufen**, aber gegen ein reales Dashboard-YAML (Sections-View, fixe Navigations-Card, Wallpanel-Kiosk, durchweg Custom Cards) durchgesehen – die Befunde daraus sind in 0.1.2 eingearbeitet. **Die Farbwerte des hellen Themes sind rechnerisch gewählt und noch nicht im Browser beurteilt** → `docs/card-demo.html` öffnen, Umschalter „hell/dunkel“ × Stufe „egg“. **Golf (0.2.0) und Urlaubsoutfit sind ebenfalls nur in jsdom gelaufen** (die Golfrunde fünfmal komplett, ohne Fehler, Ball versenkt), nicht im Browser beurteilt → Demo-Seite: Golfloch bauen, ⚽ drücken; Checkbox „Urlaub“. Verbleibendes Restrisiko: Touch-Verhalten auf dem Pi-Kiosk, Erkennung ungewöhnlicher fixer Leisten, `position: fixed` des Overlays, falls Wallpanel `transform`/`filter` auf `body` setzt (das würde die Koordinaten verschieben). |
 | HACS | `hacs.json` vorhanden; Repository muss auf GitHub liegen und als Custom Repository (Integration) eingebunden werden. Nicht getestet. |
 
 ## 6. Erste Live-Inbetriebnahme – Checkliste für den Nutzer/nächste Session
@@ -109,6 +112,8 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - Weitere Tricks aus dem Konzept: Sensorziffern „stehlen“, Seifenblasen, Kreide-Smiley, Angeln, Schaukeln, Schlafwandeln.
 - Weitere Trigger: Fenster offen bei Kälte (Schal, zeigt auf Fenster-Kachel), Luftqualität (Maske), Batterie leer (trägt Batterie), Müllabfuhr-Kalender, PV-Überschuss.
 - Träume beim Schlafen, Besuch bei Gästen, Haustier-Tagebuch (Markdown-Sensor), saisonale Quests.
+- Urlaub automatisch aus dem Kalender (Stichwort „Urlaub“/„frei“, KONZEPT 4.2) oder nach N Stunden leerem Haus – bewusst nicht in 0.2.0, weil ein falsch erkannter Urlaub das Tier still verhungern ließe; bis dahin per Automation auf `pixel.set_vacation`.
+- Golf: Fahne winkt nur per CSS; Schläger/Schwung-Sprite fehlt. Der Abschlag liegt immer auf der Höhe der jeweiligen Standfläche, der Ball überfliegt Karten nicht bewusst.
 - Sound-Hooks (Sonos) als Automations-Blueprints statt im Code.
 - Pixel-Sprite-Sequenzen für Sonderaktionen (Purzelbaum, Schneemann) als Ergänzung zum SVG-Rig.
 - Stufen-Designs: Ei/Baby/Senior sind bisher nur Farbe/Form, Kind/Teen/Erwachsen identisch.
@@ -133,7 +138,9 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - **Die Demo-Seite läuft nicht mehr über `file://`.** Seit der Aufteilung in ES-Module holt der Browser die Skripte per CORS, und `file://` hat den Origin `null` – jeder Browser blockiert das. Nötig ist ein HTTP-Server: `python3 -m http.server 8000` im Projektverzeichnis, dann `http://localhost:8000/docs/card-demo.html`. Die Seite zeigt bei `file://` von selbst einen Hinweis. In Home Assistant ist das kein Thema, dort läuft ohnehin alles über HTTP.
 - **Der Smoke-Test lädt die Card als echtes Modul.** `window.eval` wertet nach dem Script-Goal aus und bricht an der ersten `import`-Zeile. Stattdessen liegen die jsdom-Globals auf `globalThis`, dann `await import(...)`. Zwei Fallen: `performance` darf **nicht** übernommen werden (jsdoms `Performance.now()` ruft das globale `performance` auf und läuft in eine Endlosrekursion, sobald es selbst das globale ist), und Stubs gehören auf `globalThis`, nicht auf `window` — der Modulcode läuft im Node-Realm und bindet `getComputedStyle` beim Import.
 - **Keine `datetime` in Listenfeldern des `PetState`.** `to_dict` wandelt nur Felder der obersten Ebene nach ISO; ein Zeitstempel innerhalb von `builds` bräche den Roundtrip. Deshalb ist `Build.created` ein ISO-String.
-- **Neue `Activity`-Werte nicht ans Ende hängen.** Der Fallback für unbekannte gespeicherte Werte ist `list(enum_cls)[-1]`. Und die `options`-Liste am `activity`-Sensor muss mitziehen, sonst loggt HA einen ungültigen Enum-Zustand.
+- **Neue `Activity`-/`Mood`-Werte nicht ans Ende hängen.** Der Fallback für unbekannte gespeicherte Werte ist `list(enum_cls)[-1]`. Die `options`-Liste am `activity`-Sensor muss mitziehen, sonst loggt HA einen ungültigen Enum-Zustand; neue Stimmungen zusätzlich in `services.yaml` (`set_mood`) und in `entity.select.mood.state` + `selector.mood.options` aller drei Übersetzungen.
+- **Im Urlaub bleibt krank krank.** `HealthRule` pausiert, ein bei Urlaubsbeginn krankes Tier trägt bis zur Medizin das Thermometer (Mood `sick` steht über `vacation`). Die In-Memory-Merker pausierter Regeln (`_was_hungry`, `_reminded_window`) behalten ihren Stand – harmlos, weil Hunger eingefroren ist.
+- **Der Setup-Integrationstest patcht die Uhrzeit.** Der Test-Kern läuft in US/Pacific; ohne festen Zeitpunkt schläft das Tier dort nachts und trägt die Schlafmütze statt der Sonnenbrille. Wer neue Setup-Assertions zum Outfit schreibt, hält sich an das Muster in `test_setup_creates_entities_and_services`.
 - jsdom-Test stubbt `getBoundingClientRect`; Layout-Fragen (Überlappung, Clip-Optik) und **Farbkontraste** sind damit **nicht** abgedeckt → `docs/card-demo.html` im Browser öffnen (hat seit 0.1.2 einen Hell/Dunkel-Umschalter und eine fixe Leiste am unteren Rand, seit 0.1.4 eine Auswahl zum Bauen).
 - jsdom kennt weder `document.elementFromPoint` noch `Element.animate`. Beide Stellen (`_bottomBarTop`, `_covered`, `_shake`) haben darum einen Feature-Guard; wer ihn entfernt, bricht den Smoke-Test.
 - Zwei Rig-Instanzen: Overlay-Tier **und** Chip-Tier. Wer am Rig etwas ergänzt, das von außen gesetzt wird (wie `setTheme`), muss beide bedienen – Sammelpunkt ist `PixelCard._applyTheme()`.
