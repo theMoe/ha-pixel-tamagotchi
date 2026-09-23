@@ -3,7 +3,7 @@
   "name": "Pixel – Dashboard-Tamagotchi",
   "codeowners": ["@theMoe"],
   "config_flow": true,
-  "dependencies": ["http", "frontend"],
+  "dependencies": ["http", "frontend", "websocket_api"],
   "after_dependencies": ["calendar", "weather", "zone", "media_player"],
   "documentation": "https://github.com/theMoe/ha-pixel-tamagotchi",
   "integration_type": "service",

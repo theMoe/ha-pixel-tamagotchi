@@ -14,6 +14,7 @@ from custom_components.pixel.const import (
     DOMAIN,
     EVENT_TYPE,
 )
+from custom_components.pixel.websocket import WS_SUBSCRIBE_EVENTS
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -136,6 +137,28 @@ async def test_say_fires_card_event_without_state_change(hass: HomeAssistant, en
     await hass.async_block_till_done()
     assert events[-1]["type"] == "say"
     assert events[-1]["text"] == "Hallo Familie"
+
+
+async def test_non_admin_receives_card_events(
+    hass: HomeAssistant, entry: MockConfigEntry, hass_ws_client, hass_read_only_access_token: str
+) -> None:
+    """Kiosk-Nutzer ohne Admin-Recht: das Bus-Abo ist gesperrt, der eigene Befehl nicht."""
+    await setup_integration(hass, entry)
+    client = await hass_ws_client(hass, hass_read_only_access_token)
+
+    await client.send_json_auto_id({"type": "subscribe_events", "event_type": EVENT_TYPE})
+    refused = await client.receive_json()
+    assert refused["success"] is False
+
+    await client.send_json_auto_id({"type": WS_SUBSCRIBE_EVENTS})
+    subscribed = await client.receive_json()
+    assert subscribed["success"] is True
+
+    await hass.services.async_call(DOMAIN, "play", {}, blocking=True)
+    message = await client.receive_json()
+    assert message["id"] == subscribed["id"]
+    assert message["event"]["type"] == "played"
+    assert message["event"]["entry_id"] == entry.entry_id
 
 
 async def test_tick_advances_time(hass: HomeAssistant, entry: MockConfigEntry) -> None:

@@ -14,6 +14,7 @@ from .frontend import async_register_frontend
 from .services import async_register_services
 from .settings import PixelSettings
 from .store import PetStore
+from .websocket import async_register_websocket
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,8 +28,9 @@ PLATFORMS: list[Platform] = [
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Domain-weite Einrichtung: Services und Card-Auslieferung."""
+    """Domain-weite Einrichtung: Services, Card-Auslieferung und Event-Abo der Card."""
     async_register_services(hass)
+    async_register_websocket(hass)
     await async_register_frontend(hass)
     return True
 
