@@ -2,7 +2,8 @@
 
 export const CARD_TAG = "pixel-card";
 export const DOMAIN = "pixel";
-export const EVENT_TYPE = "pixel_event";
+// Eigener WS-Befehl statt subscribe_events: das Bus-Abo erlaubt HA nur Admins, ein Kiosk ist meist keiner.
+export const SUBSCRIBE_EVENTS = `${DOMAIN}/subscribe_events`;
 export const PET_BASE_SIZE = 64;
 // Wie tief das Tier beim Verstecken hinter die Kartenkante sinkt, als Anteil seiner Groesse.
 // Das Rig zeichnet in viewBox "-4 -4 24 22", also 2,67 px je Einheit bei 2,67 px Versatz:

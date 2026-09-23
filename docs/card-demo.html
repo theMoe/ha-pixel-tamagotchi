@@ -126,7 +126,7 @@
       themes: { darkMode: !document.documentElement.classList.contains("light") },
       states: { "sensor.pixel_status": { state: status.mood, attributes: { ...status, outfit: { ...status.outfit } } } },
       formatEntityState: (s) => s.state,
-      connection: { subscribeEvents: (cb, type) => { listeners.push(cb); return Promise.resolve(() => {}); } },
+      connection: { subscribeMessage: (cb) => { listeners.push(cb); return Promise.resolve(() => {}); } },
       callService: async (domain, service, data) => {
         console.log("callService", domain, service, data);
         if (service === "feed") { status.hunger = Math.min(100, status.hunger + 35); status.activity = "eating"; fire("fed"); setTimeout(() => { status.activity = "idle"; push(); status.poop_count++; fire("poop"); push(); }, 4000); }
@@ -145,7 +145,7 @@
   const card = document.getElementById("card");
   const card2 = document.getElementById("card2"); // nur Chip; das Tier haelt bereits card (__pixelOverlayOwner)
   function push() { status.mood = status.sleeping ? "sleeping" : status.vacation ? "vacation" : status.hunger < 30 ? "hungry" : "happy"; const h = makeHass(); card.hass = h; card2.hass = h; }
-  function fire(type, data = {}) { listeners.forEach((cb) => cb({ data: { entry_id: "demo", type, ...data } })); }
+  function fire(type, data = {}) { listeners.forEach((cb) => cb({ entry_id: "demo", type, ...data })); }
 
   card.setConfig({ entity: "sensor.pixel_status", show_status: true });
   card2.setConfig({ entity: "sensor.pixel_status", show_status: true });

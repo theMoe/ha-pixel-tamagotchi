@@ -18,7 +18,7 @@
  */
 
 import { Brain } from "./brain.js";
-import { CARD_TAG, DEFAULT_CONFIG, DOMAIN, EVENT_TYPE } from "./const.js";
+import { CARD_TAG, DEFAULT_CONFIG, DOMAIN, SUBSCRIBE_EVENTS } from "./const.js";
 import { Furniture } from "./furniture.js";
 import { Mover } from "./mover.js";
 import { Overlay } from "./overlay.js";
@@ -212,12 +212,11 @@ class PixelCard extends HTMLElement {
   async _subscribe() {
     const conn = this._hass?.connection;
     if (!conn || this._unsubEvents) return;
-    this._unsubEvents = conn.subscribeEvents((ev) => {
-      const d = ev.data || {};
+    this._unsubEvents = conn.subscribeMessage((d = {}) => {
       const entry = this._lastAttrs?.entry_id;
       if (entry && d.entry_id && d.entry_id !== entry) return;
       this._brain?.onEvent(d.type, d);
-    }, EVENT_TYPE);
+    }, { type: SUBSCRIBE_EVENTS });
   }
 
   /* ---------------- Interaktion */

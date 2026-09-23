@@ -63,7 +63,7 @@ const hass = {
   locale: { language: "de" },
   states: { "sensor.pixel_status": { state: "happy", attributes: attrs } },
   formatEntityState: (s) => s.state,
-  connection: { subscribeEvents: (cb) => { subscriber = cb; return Promise.resolve(() => {}); } },
+  connection: { subscribeMessage: (cb, msg) => { assert.equal(msg.type, "pixel/subscribe_events"); subscriber = cb; return Promise.resolve(() => {}); } },
   callService: (d, s, data) => { calls.push([d, s, data]); return Promise.resolve(); },
 };
 
@@ -190,11 +190,11 @@ await tick(10);
 // Events vom Bus
 await tick(700); // Begrüßung abwarten
 assert.ok(subscriber, "Events abonniert");
-subscriber({ data: { entry_id: "x", type: "appointment_soon", title: "Termin A", minutes: 10 } });
+subscriber({ entry_id: "x", type: "appointment_soon", title: "Termin A", minutes: 10 });
 await tick(1200);
 assert.ok(overlay.querySelector(".pixel-bubble").textContent.includes("Termin A"), "Termin in Sprechblase");
-subscriber({ data: { entry_id: "other", type: "say", text: "fremd" } });
-subscriber({ data: { entry_id: "x", type: "fell_asleep", reason: "tired" } });
+subscriber({ entry_id: "other", type: "say", text: "fremd" });
+subscriber({ entry_id: "x", type: "fell_asleep", reason: "tired" });
 await tick(50);
 assert.ok(overlay.querySelector(".pixel-bubble").textContent.includes("nickerchen"), "Nickerchen-Text beim Erschoepfungsschlaf");
 assert.ok(!overlay.querySelector(".pixel-bubble").textContent.includes("fremd"), "fremde entry_id ignoriert");
@@ -262,11 +262,11 @@ assert.equal(objekte().length, 1, "nur das angetippte verschwindet");
   card._brain._visitBuild = async (b) => { besucht = b; };
   card._brain._trick = async () => { purzelbaum++; };
   card._brain.busy = false;
-  subscriber({ data: { entry_id: "x", type: "played", build_id: "b2", build_kind: "golf" } });
+  subscriber({ entry_id: "x", type: "played", build_id: "b2", build_kind: "golf" });
   await tick(10);
   assert.equal(besucht?.id, "b2", "played mit build_id fuehrt zum genannten Objekt");
   assert.equal(purzelbaum, 0, "kein Purzelbaum, wenn ein Objekt genannt ist");
-  subscriber({ data: { entry_id: "x", type: "played", build_id: null, build_kind: null } });
+  subscriber({ entry_id: "x", type: "played", build_id: null, build_kind: null });
   await tick(10);
   assert.equal(purzelbaum, 1, "ohne Objekt bleibt der Purzelbaum");
   assert.equal(card._brain.busy, false, "danach wieder frei");
