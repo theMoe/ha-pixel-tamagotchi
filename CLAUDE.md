@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Orientierung
 
-Home-Assistant-Custom-Integration `pixel` (Spiellogik, Entities, Services) plus eine Lovelace-Card, die die Integration selbst ausliefert. Vor größeren Änderungen `PROJEKTSTAND.md` lesen: Architekturkarte, bewusst getroffene Entscheidungen, Stolpersteine, Backlog. `README.md` ist die Nutzersicht (Entities, Services, Spielregeln), `docs/KONZEPT.md` die Idee.
+Home-Assistant-Custom-Integration `pixel` (Spiellogik, Entities, Services) plus eine Lovelace-Card, die die Integration selbst ausliefert. Vor größeren Änderungen `PROJEKTSTAND.md` lesen: Architekturkarte, bewusst getroffene Entscheidungen, Stolpersteine, Backlog. `README.md` (englisch) und `README.de.md` (deutsch) sind die Nutzersicht (Entities, Services, Spielregeln), `docs/KONZEPT.md` die Idee.
 
 Doku, Kommentare und Docstrings sind **deutsch**, Code-Identifier englisch.
 
@@ -16,7 +16,7 @@ uv venv .venv --python 3.14
 uv pip install --python .venv/bin/python homeassistant==2026.9.0 -r requirements_test.txt
 
 # Tests
-.venv/bin/python -m pytest                      # alles (52 Engine + 12 Integration)
+.venv/bin/python -m pytest                      # alles (52 Engine + 12 Integration + 6 README-Sync)
 .venv/bin/python -m pytest tests/engine         # nur Engine, braucht kein homeassistant
 .venv/bin/python -m pytest tests/engine/test_rules.py::test_long_outage_is_capped
 .venv/bin/python -m pytest -k outfit
@@ -77,7 +77,7 @@ Modulrollen:
 - **Neue Entity** = vier Dateien: Plattformmodul, `strings.json`, `translations/en.json`, `translations/de.json` (Schlüsselmengen identisch halten). `description.key` ist zugleich `translation_key` und Suffix von `unique_id = f"{entry_id}_{key}"`; Entity-IDs folgen den **englischen** Namen.
 - **Neuer Service** = Zeile in `_table()` (`services.py`) + Block in `services.yaml` + Übersetzungen.
 - **Neuer Schalter** = Zeile in `SWITCHES` (`switch.py`) mit `is_on_fn` (Snapshot-Zugriff) und `set_fn` (Coordinator-Setter oder `async_act`). Persistiertes Spielverhalten (wie Urlaub) läuft als Engine-Aktion, damit Persistenz und Events denselben Weg nehmen.
-- **Neues Event** = emitten in `rules.py`/`actions.py` → in `pixel-card.js` unter `Brain.onEvent` behandeln → Events-Liste in `README.md` ergänzen.
+- **Neues Event** = emitten in `rules.py`/`actions.py` → in `pixel-card.js` unter `Brain.onEvent` behandeln → Events-Liste in `README.md` und `README.de.md` ergänzen.
 - **Neues Outfit-Teil** = `OutfitResolver` + SVG-Layer `hat-*`/`acc-*`/`item-*` im `RIG_SVG` + Fall in `tests/engine/test_actions.py::test_weather_outfits`.
 - Ruff: line-length 120, Regelsatz `E F I UP B SIM RUF ANN`, `target-version = py312`. **Kein Gedankenstrich in `.py`** (RUF002).
 - Regeln, Aktionen und Entities sind kleine Klassen oder Tabellenzeilen; in den Description-Lambdas steht nur ein Feldzugriff, keine verzweigte Logik.
@@ -85,7 +85,8 @@ Modulrollen:
 ## Fallen
 
 - **Card-Cache:** Die Card wird als `?v={VERSION}` ausgeliefert (`frontend.py`). Nach jeder Änderung an `pixel-card.js` muss `VERSION` in `const.py` erhöht werden, sonst sieht kein Browser die Änderung. Die Version steht an drei Stellen (`const.py`, `manifest.json`, `pyproject.toml`); die cache-relevante ist `const.VERSION`.
-- **Keine persönlichen Daten ins Repo.** Das Repo ist öffentlich. Beispiele in README, PROJEKTSTAND, `docs/*.html` und Tests bleiben generisch: keine echten Entity-IDs, Namen, Orte, Kalendertitel oder MAC-Adressen. Geteiltes Dashboard-YAML des Nutzers ist Arbeitsmaterial und wird nie übernommen, auch nicht gekürzt. Vor dem Commit prüfen: `grep -rniE "<eigener ort>|<eigene namen>" . --exclude-dir=node_modules --exclude-dir=.git` muss leer sein.
+- **Keine persönlichen Daten ins Repo.** Das Repo ist öffentlich. Beispiele in beiden READMEs, PROJEKTSTAND, `docs/*.html` und Tests bleiben generisch: keine echten Entity-IDs, Namen, Orte, Kalendertitel oder MAC-Adressen. Geteiltes Dashboard-YAML des Nutzers ist Arbeitsmaterial und wird nie übernommen, auch nicht gekürzt. Vor dem Commit prüfen: `grep -rniE "<eigener ort>|<eigene namen>" . --exclude-dir=node_modules --exclude-dir=.git` muss leer sein.
+- **README zweisprachig:** `README.md` (EN, zeigen GitHub und HACS an) und `README.de.md` (DE) sind inhaltlich deckungsgleich. Jede Änderung an einer der beiden wird im selben Commit in der anderen nachgezogen: gleiche Abschnitte, Tabellenzeilen, Codeblöcke und Bezeichner. `tests/test_readme_sync.py` prüft die Struktur, die Übersetzung selbst nicht.
 - **`"requirements": []` im Manifest ist Absicht** — die Integration ist reines stdlib. Keine Laufzeitabhängigkeit hinzufügen.
 - **Services sind domänenweit, nicht entity-getargetet.** Ohne `config_entry_id` trifft ein Aufruf stillschweigend `entries[0]`.
 - **Optionen werden heiß übernommen:** `apply_settings` baut eine neue `PetEngine` um den bestehenden `PetState` (`coordinator.py`). Das Tier überlebt, aber tick-übergreifende In-Memory-Flags einzelner Regeln (`HungerEventRule._was_hungry`, `FeedingReminderRule._reminded_window`) werden dabei zurückgesetzt.

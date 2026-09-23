@@ -1,6 +1,6 @@
 # PROJEKTSTAND – Pixel, Dashboard-Tamagotchi für Home Assistant
 
-> Briefing für die nächste Session. Zuerst lesen, dann `README.md` für Nutzersicht, `docs/KONZEPT.md` für die Idee.
+> Briefing für die nächste Session. Zuerst lesen, dann `README.md` (EN) bzw. `README.de.md` (DE, beide immer gemeinsam ändern) für die Nutzersicht, `docs/KONZEPT.md` für die Idee.
 > Stand: 23.09.2026 · Version 0.2.3 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
 
 ## 1. Was ist das
@@ -38,6 +38,7 @@ custom_components/pixel/
 tests/
   engine/                 52 Tests, reine Python, kein HA nötig (conftest hängt engine/ in sys.path)
   test_integration.py     12 Tests mit pytest-homeassistant-custom-component (Setup, Services, Reload, Optionen, Urlaub, Event-Abo ohne Admin)
+  test_readme_sync.py     6 Tests, reine stdlib: README.md (EN) und README.de.md (DE) strukturell deckungsgleich
   frontend/card.smoke.test.mjs   jsdom-Smoke-Test der Card (Mount, Scan, Menü, Events, Verstecken, Unmount)
 docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card + Mock-hass)
 ```
@@ -79,7 +80,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - Kommentare/Docstrings Deutsch, Code-Identifier Englisch. Kein Gedankenstrich in `.py` (RUF002).
 - Jede Regel/Aktion/Entity ist eine kleine Klasse oder Tabellenzeile; keine Logik in Lambdas außer `value_fn`.
 - Balancing **nur** in `engine/config.py` ändern; Nutzeroptionen darüber in `settings.py` mappen.
-- Neue Events: in `rules.py`/`actions.py` emitten → in `pixel-card.js` `Brain.onEvent` behandeln → in `README.md` Events-Liste ergänzen.
+- Neue Events: in `rules.py`/`actions.py` emitten → in `pixel-card.js` `Brain.onEvent` behandeln → in `README.md` und `README.de.md` Events-Liste ergänzen.
 - Neue Outfit-Teile: `OutfitResolver` (Name) + SVG-Layer `hat-*`/`acc-*`/`item-*` im `RIG_SVG` + Test in `test_actions.py::test_weather_outfits`.
 - Vor Abgabe: `python -m pytest`, `ruff`, `node --check pixel-card.js`, `node tests/frontend/card.smoke.test.mjs`.
 
@@ -154,5 +155,5 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - jsdom kennt weder `document.elementFromPoint` noch `Element.animate`. Beide Stellen (`_bottomBarTop`, `_covered`, `_shake`) haben darum einen Feature-Guard; wer ihn entfernt, bricht den Smoke-Test.
 - Zwei Rig-Instanzen: Overlay-Tier **und** Chip-Tier. Wer am Rig etwas ergänzt, das von außen gesetzt wird (wie `setTheme`), muss beide bedienen – Sammelpunkt ist `PixelCard._applyTheme()`.
 - `Rig.apply()` schreibt `className` neu und entfernt per Regex nur `stage-*`. Weitere Zustandsklassen (`theme-light`, `flip`, `fainted`) überleben das nur, solange das so bleibt.
-- **Keine persönlichen Daten ins öffentliche Repo.** Beispiele in README, PROJEKTSTAND, Demo-Seiten und Tests bleiben generisch (keine echten Entity-IDs, Namen, Orte, Kalendertitel, MAC-Adressen). Vor dem Commit prüfen:
+- **Keine persönlichen Daten ins öffentliche Repo.** Beispiele in beiden READMEs, PROJEKTSTAND, Demo-Seiten und Tests bleiben generisch (keine echten Entity-IDs, Namen, Orte, Kalendertitel, MAC-Adressen). Vor dem Commit prüfen:
   `grep -rniE "<eigener ort>|<eigene namen>" . --exclude-dir=node_modules --exclude-dir=.git` muss leer sein.
