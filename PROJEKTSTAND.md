@@ -1,7 +1,7 @@
 # PROJEKTSTAND – Pixel, Dashboard-Tamagotchi für Home Assistant
 
 > Briefing für die nächste Session. Zuerst lesen, dann `README.md` für Nutzersicht, `docs/KONZEPT.md` für die Idee.
-> Stand: 22.09.2026 · Version 0.2.2 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
+> Stand: 23.09.2026 · Version 0.2.3 · getestet gegen HA 2026.9.0 / 2026.8.3 / 2025.1.4 · Autor: Moritz (GitHub theMoe), Umsetzung mit Claude.
 
 ## 1. Was ist das
 
@@ -27,6 +27,7 @@ custom_components/pixel/
   world.py                WorldAdapter: HA-States → WorldContext (Wetter-Map, calendar.get_events mit 5-min-Cache, zone.home, media_player)
   store.py                PetStore um homeassistant.helpers.storage.Store (Key pixel.<entry_id>)
   coordinator.py          PixelCoordinator: 60-s-Tick, async_act(), feuert pixel_event, speichert, data = Snapshot-Dict
+  websocket.py            WS-Befehl pixel/subscribe_events: reicht pixel_event an die Card weiter, auch ohne Admin
   services.py             Tabelle ServiceSpec → generische Registrierung; ermittelt Nutzer für Statistik
   frontend.py             static path /pixel-static + add_extra_js_url → Card ohne Ressourcen-Eintrag
   config_flow.py          3 Schritte (Name, Welt, Spielregeln) + OptionsFlow; Optionsänderung ohne Neustart
@@ -36,14 +37,14 @@ custom_components/pixel/
   services.yaml, manifest.json
 tests/
   engine/                 52 Tests, reine Python, kein HA nötig (conftest hängt engine/ in sys.path)
-  test_integration.py     11 Tests mit pytest-homeassistant-custom-component (Setup, Services, Reload, Optionen, Urlaub)
+  test_integration.py     12 Tests mit pytest-homeassistant-custom-component (Setup, Services, Reload, Optionen, Urlaub, Event-Abo ohne Admin)
   frontend/card.smoke.test.mjs   jsdom-Smoke-Test der Card (Mount, Scan, Menü, Events, Verstecken, Unmount)
 docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card + Mock-hass)
 ```
 
 **Datenfluss:** Coordinator-Tick → `WorldAdapter.build()` → `engine.tick(world)` → Regeln mutieren `PetState`, sammeln `GameEvent`s → Mood/Outfit/Activity ableiten → Events auf `pixel_event` → `snapshot()` als `coordinator.data` → Entities lesen daraus → `sensor.<name>_status` trägt **alle** Attribute für die Card.
 
-**Card:** liest nur `sensor.*_status`-Attribute (ein Subscription-Punkt) + `pixel_event` via `hass.connection.subscribeEvents`. Aktionen über `hass.callService("pixel", …, {config_entry_id})`.
+**Card:** liest nur `sensor.*_status`-Attribute (ein Subscription-Punkt) + `pixel_event` über den eigenen WS-Befehl `pixel/subscribe_events` (`hass.connection.subscribeMessage`, siehe Entscheidung 23). Aktionen über `hass.callService("pixel", …, {config_entry_id})`.
 
 ## 3. Wichtige Entscheidungen (nicht erneut diskutieren, außer mit neuem Grund)
 
@@ -70,6 +71,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 20. **Golf-Schlagplanung als reine Funktion** (`golf.js: planStrokes`) mit injizierbarem Zufall, im Smoke-Test abgedeckt. Das Brain macht nur Wege und Animation: Abschlag auf der Seite mit mehr Platz, jeder Ball landet auf einer Standfläche (`_surfaceY`, aus `_buildSpot` herausgezogen), ein einziger Ball im `BuildYard`, `TEE_MAX = 500` hält die Runde unter der Watchdog-Grenze (Worst Case ≈ 21 s bei 30 s Limit).
 21. **Baufälligkeit liegt im `PetState`, Fehlversuche schieben nur kurz auf.** `build_due_at` überlebt Neustart und `apply_settings`. Bis 0.2.0 schob die `BuildRule` die Fälligkeit *vor* der Prüfung von Laune/Energie/Obergrenze um ein ganzes Intervall weiter; ein schlecht gelaunter Moment (z. B. direkt nach dem Aufwachen) kostete so 8 h, unsichtbar. Seit 0.2.1 prüft `_can_build` zuerst, ein Fehlversuch wartet `build_retry_minutes` (30), Schlaf/Krankheit/Ei lassen die Fälligkeit stehen. `next_build_at` steht im Snapshot und am `builds`-Sensor (`next_at`), damit sich „warum baut es nicht?“ ohne Store-Blick beantworten lässt.
 22. **Nickerchen-Schwelle getrennt von „ausgeschlafen“, Schlafgrund als Ableitung.** Bis 0.2.1 endete jeder automatische Schlaf erst bei `rested_threshold` (60); ein Erschöpfungsschlaf am Nachmittag dauerte damit mindestens 3,75 h und sah für den Nutzer wie eine falsche Uhrzeit aus (Live-Befund 22.09.: schläft um 17:36 bei Energie 40, Laune 100). Seit 0.2.2 endet automatischer Schlaf außerhalb der Nacht bei `nap_rested_threshold` (40); 60 gilt nur noch für das Verfallen eines manuellen Schlafs. Der Grund (`night`/`tired`/`manual`) ist `PetState.sleep_reason(night)`, eine reine Ableitung aus `sleeping_manual` und Tageszeit: kein neues Store-Feld, keine Migration, und Regel, Aktion und Snapshot nutzen dieselbe Stelle. Verworfen: den Grund beim Einschlafen zu persistieren (zweite Wahrheit neben `sleeping_manual`).
+23. **Card-Events über einen eigenen WS-Befehl, nicht über `subscribe_events`.** HA erlaubt das Bus-Abo für eigene Event-Typen nur Admins (`websocket_api/commands.py`, `SUBSCRIBE_ALLOWLIST`); jeder andere Nutzer bekommt `Unauthorized`, im Log steht `Refusing to allow … to subscribe to event pixel_event`. Live-Befund 23.09.: Der Pi-Kiosk mit Nicht-Admin-Nutzer zeigte keine Event-Sprechblasen, und seit 0.2.2 spielte das Tier dort gar nicht mehr, weil das Spielen vom Activity-Wechsel (State-Kanal) auf das `played`-Event umgezogen war. Selbst erzeugte Texte der Card (Idle, Hallo, Verstecken) liefen weiter und verdeckten das Muster. Seit 0.2.3 reicht `websocket.py` das Event über `pixel/subscribe_events` an jeden angemeldeten Nutzer weiter. Der Inhalt steht ohnehin im Status-Sensor, das Bus-Event für Automationen bleibt. Verworfen: Events in Sensor-Attribute spiegeln (Sequenznummern, Replay-Schutz, Recorder-Last) und den Kiosk-Nutzer zum Admin machen (Workaround, nicht für alle).
 
 ## 4. Konventionen
 
@@ -86,7 +88,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 | Bereich | Status |
 |---|---|
 | Engine | 52 Tests grün. Balancing plausibel, aber **nicht im Alltag erprobt** (Zahlen ggf. nach 1–2 Wochen nachjustieren). |
-| Integration | 11 Tests grün gegen **HA 2026.9.0 und 2026.8.3 (Python 3.14)** sowie 2025.1.4 (Python 3.12); keine Deprecation-Hinweise zu `custom_components.pixel`. Ruff sauber unter 3.14. **Nicht auf einer Live-Instanz gestartet.** |
+| Integration | 11 Tests grün gegen **HA 2026.9.0 und 2026.8.3 (Python 3.14)** sowie 2025.1.4 (Python 3.12); der zwölfte (Event-Abo ohne Admin, 0.2.3) nur gegen 2026.9.0; keine Deprecation-Hinweise zu `custom_components.pixel`. Ruff sauber unter 3.14. **Nicht auf einer Live-Instanz gestartet.** |
 | Config-Flow | Programmatisch geprüft (Import, Schema). UI-Durchlauf nicht getestet. |
 | Card | jsdom-Smoke-Test grün, `node --check` sauber, Demo-Seite vorhanden. **Im echten HA-Frontend noch nie gelaufen**, aber gegen ein reales Dashboard-YAML (Sections-View, fixe Navigations-Card, Wallpanel-Kiosk, durchweg Custom Cards) durchgesehen – die Befunde daraus sind in 0.1.2 eingearbeitet. **Die Farbwerte des hellen Themes sind rechnerisch gewählt und noch nicht im Browser beurteilt** → `docs/card-demo.html` öffnen, Umschalter „hell/dunkel“ × Stufe „egg“. **Golf (0.2.0) und Urlaubsoutfit sind ebenfalls nur in jsdom gelaufen** (die Golfrunde fünfmal komplett, ohne Fehler, Ball versenkt), nicht im Browser beurteilt → Demo-Seite: Golfloch bauen, ⚽ drücken; Checkbox „Urlaub“. Verbleibendes Restrisiko: Touch-Verhalten auf dem Pi-Kiosk, Erkennung ungewöhnlicher fixer Leisten, `position: fixed` des Overlays, falls Wallpanel `transform`/`filter` auf `body` setzt (das würde die Koordinaten verschieben). |
 | HACS | `hacs.json` vorhanden; Repository muss auf GitHub liegen und als Custom Repository (Integration) eingebunden werden. Nicht getestet. |
@@ -147,6 +149,7 @@ docs/  KONZEPT.md, prototyp.html (Wegwerf-Prototyp), card-demo.html (echte Card 
 - **Im Urlaub bleibt krank krank.** `HealthRule` pausiert, ein bei Urlaubsbeginn krankes Tier trägt bis zur Medizin das Thermometer (Mood `sick` steht über `vacation`). Die In-Memory-Merker pausierter Regeln (`_was_hungry`, `_reminded_window`) behalten ihren Stand – harmlos, weil Hunger eingefroren ist.
 - **Lokale Zeit ist die HA-Serverzeit.** `WorldAdapter.build` liefert `local_now = dt_util.as_local(utcnow())`; alle Tageszeit-Entscheidungen (Nacht, Fütterungsfenster, Tagesreset, Jahreszeit) laufen darüber, UTC nur in `now`, Persistenz und Rechnungen. Die Engine-Tests rechnen in Europe/Berlin (`conftest.make_world`), der Integrationstest im US/Pacific des Test-Kerns. Wer „schläft zur falschen Zeit“ hört: erst `reason` am Schlaf-Sensor lesen, ein `tired` ist Balancing, kein Zeitfehler.
 - **Der Setup-Integrationstest patcht die Uhrzeit.** Der Test-Kern läuft in US/Pacific; ohne festen Zeitpunkt schläft das Tier dort nachts und trägt die Schlafmütze statt der Sonnenbrille. Wer neue Setup-Assertions zum Outfit schreibt, hält sich an das Muster in `test_setup_creates_entities_and_services`.
+- **Card-Reaktionen nie direkt an ein Bus-Abo hängen.** `subscribeEvents` für eigene Typen klappt nur für Admins; ein Kiosk oder Wandtablet läuft meist mit normalem Nutzer. Beim Test am eigenen Rechner (Admin) fällt das nicht auf. Neue Card-Events laufen automatisch über `pixel/subscribe_events` mit, solange sie als `pixel_event` gefeuert werden. Wer dem Tier etwas „nur per Event“ beibringt, prüft einmal mit einem Nutzer ohne Admin-Recht.
 - jsdom-Test stubbt `getBoundingClientRect`; Layout-Fragen (Überlappung, Clip-Optik) und **Farbkontraste** sind damit **nicht** abgedeckt → `docs/card-demo.html` im Browser öffnen (hat seit 0.1.2 einen Hell/Dunkel-Umschalter und eine fixe Leiste am unteren Rand, seit 0.1.4 eine Auswahl zum Bauen).
 - jsdom kennt weder `document.elementFromPoint` noch `Element.animate`. Beide Stellen (`_bottomBarTop`, `_covered`, `_shake`) haben darum einen Feature-Guard; wer ihn entfernt, bricht den Smoke-Test.
 - Zwei Rig-Instanzen: Overlay-Tier **und** Chip-Tier. Wer am Rig etwas ergänzt, das von außen gesetzt wird (wie `setTheme`), muss beide bedienen – Sammelpunkt ist `PixelCard._applyTheme()`.

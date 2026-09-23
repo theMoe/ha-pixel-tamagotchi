@@ -16,7 +16,7 @@ uv venv .venv --python 3.14
 uv pip install --python .venv/bin/python homeassistant==2026.9.0 -r requirements_test.txt
 
 # Tests
-.venv/bin/python -m pytest                      # alles (52 Engine + 11 Integration)
+.venv/bin/python -m pytest                      # alles (52 Engine + 12 Integration)
 .venv/bin/python -m pytest tests/engine         # nur Engine, braucht kein homeassistant
 .venv/bin/python -m pytest tests/engine/test_rules.py::test_long_outage_is_capped
 .venv/bin/python -m pytest -k outfit
@@ -52,7 +52,7 @@ PixelCoordinator._async_update_data
   → Entities lesen nur daraus (nie Engine-Objekte)
 ```
 
-**Ein Subscription-Punkt für die Card:** `sensor.<name>_status` trägt die Stimmung als State und kippt per `attributes_fn=lambda s: dict(s)` (`sensor.py`) den *gesamten* Snapshot in die Attribute. Die Card liest nur diesen Sensor plus `pixel_event` und handelt über `hass.callService("pixel", …, {config_entry_id})`.
+**Ein Subscription-Punkt für die Card:** `sensor.<name>_status` trägt die Stimmung als State und kippt per `attributes_fn=lambda s: dict(s)` (`sensor.py`) den *gesamten* Snapshot in die Attribute. Die Card liest nur diesen Sensor plus `pixel_event` (über den eigenen WS-Befehl `pixel/subscribe_events` aus `websocket.py`, weil HA `subscribe_events` für eigene Typen nur Admins erlaubt) und handelt über `hass.callService("pixel", …, {config_entry_id})`.
 
 Modulrollen:
 
@@ -66,6 +66,7 @@ Modulrollen:
 | `world.py` | einziges Modul, das die HA-Weltdarstellung kennt (Wetter-Map, `calendar.get_events` mit 5-min-Cache, `zone.home`, media_player) |
 | `store.py` | `.storage/pixel.<entry_id>`, debounced |
 | `services.py` | `ServiceSpec`-Tabelle → generische Registrierung; ermittelt den fütternden Nutzer |
+| `websocket.py` | `pixel/subscribe_events`: reicht `pixel_event` an die Card weiter, auch für Nutzer ohne Admin-Recht |
 | `frontend.py` | static path + `add_extra_js_url` → Card ohne Lovelace-Ressource |
 | `sensor.py` … `button.py` | Deskriptor-Tabellen; Logik nur in den Lambdas der Description (`value_fn`, `is_on_fn`) |
 

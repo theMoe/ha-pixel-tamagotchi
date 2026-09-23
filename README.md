@@ -143,7 +143,7 @@ Alle Services akzeptieren optional `config_entry_id`, falls mehrere Tiere existi
 | `pixel.reset` | `name` | Neues Ei (Statistik bleibt) |
 | `pixel.set_vacation` | `enabled`: true / false | Urlaub beginnen oder beenden (wie `switch.pixel_vacation`) |
 
-**Events:** Die Integration feuert `pixel_event` mit `type` (z. B. `fed`, `hungry`, `poop`, `sick`, `fainted`, `evolved`, `welcome_home`, `appointment_soon`, `feeding_time`, `fell_asleep` mit `reason` (`night` / `tired` / `manual`), `woke_up`, `mood_changed`, `built`, `build_removed`, `played` mit `build_id`/`build_kind`, `vacation_started`, `vacation_ended`) plus Details. Darauf lassen sich Automationen bauen.
+**Events:** Die Integration feuert `pixel_event` mit `type` (z. B. `fed`, `hungry`, `poop`, `sick`, `fainted`, `evolved`, `welcome_home`, `appointment_soon`, `feeding_time`, `fell_asleep` mit `reason` (`night` / `tired` / `manual`), `woke_up`, `mood_changed`, `built`, `build_removed`, `played` mit `build_id`/`build_kind`, `vacation_started`, `vacation_ended`) plus Details. Darauf lassen sich Automationen bauen. Die Card empfängt dieselben Events über den WebSocket-Befehl `pixel/subscribe_events`; das funktioniert ab 0.2.3 auch für Nutzer ohne Admin-Recht (Kiosk, Wandtablet).
 
 ## 9. Automationsbeispiele
 
@@ -292,6 +292,7 @@ Alle Zahlen stehen in `custom_components/pixel/engine/config.py`.
 | Pixel baut nichts | Erstes Objekt frühestens 8 Stunden nach dem ersten Start, danach alle 8 Stunden. Prüfen: `switch.pixel_vacation` aus? In `sensor.pixel_status`: `sleeping`, `sick` und `fainted` false, `stage` nicht `egg`, `happiness` ≥ 60, `energy` ≥ 35? `sensor.pixel_builds` zeigt im Attribut `next_at` den nächsten Versuch (ab 0.2.1) und unter `items`, was schon steht. |
 | Gebautes Objekt steht an einer komischen Stelle | Die waagerechte Lage kommt aus dem Backend und ist auf allen Geräten gleich; die Höhe sucht sich jede Card selbst. Auf ungewöhnlichen Layouts landet es notfalls auf der Bodenlinie. Antippen entfernt es. |
 | Pixel ist verschwunden und kommt nicht wieder | Bis 0.1.2 blieb das Tier hinter einer Karte hängen. Ab 0.1.3 behoben; ein Wächter holt es zusätzlich alle 20 s zurück, falls es doch festhängt. Prüfen, ob die geladene Card-Version aktuell ist. |
+| Auf einem Gerät fehlen Sprechblasen wie „lecker!“, und Spielen tut nichts | Bis 0.2.2 bekam die Card Events nur bei Admin-Nutzern; im HA-Log steht dann `Refusing to allow … to subscribe to event pixel_event`. Ab 0.2.3 behoben. Nach dem Update HA neu starten und das Gerät neu laden. |
 | Pixel läuft über der Navigationsleiste | Sollte automatisch erkannt werden; sonst `floor_margin` auf die Höhe der Leiste setzen. |
 | Kalender wird ignoriert | Die Integration nutzt `calendar.get_events`; die Kalender-Integration muss diese Aktion unterstützen (Google, CalDAV, lokale Kalender: ja). |
 | Entity-IDs lauten anders | Die IDs folgen dem englischen Entity-Namen; bei anderem Tiernamen ändert sich das Präfix (`sensor.blob_status`). |
